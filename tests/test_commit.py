@@ -26,6 +26,8 @@ class Tests (unittest.TestCase):
         # initialize git repository
         os.chdir(data.root)
         git(["init"])
+        git(["config", "user.email", "some@e.mail"])
+        git(["config", "user.name", "some body"])
         git(["add", "-f", self.current.config])
         git(["commit", "-m", "initial"])
         # additional files
