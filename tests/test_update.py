@@ -81,6 +81,21 @@ class Tests (unittest.TestCase):
         self.assertEqual(run("-q", "-j", "8"), 0)
         self.check_update()
 
+    def test_update_esp (self):
+        esp = data.root / "boot/EFI/linux"
+        esp.mkdir(parents=True)
+        for k in data.kernels:
+            efi = esp / k.efi.name
+            if k.efi.exists():
+                efi.touch()
+                k.efi.unlink()
+            k.efi = efi
+        data.esp.rmdir()
+        self.latest.efi = esp / self.latest.efi.name
+        self.latest.bootx64 = esp / self.latest.bootx64.name
+        self.assertEqual(run("-q", "-e", str(esp)), 0)
+        self.check_update()
+
     def test_update_source (self):
         self.assertEqual(run("-q", "-s", str(data.latest)), 0)
         self.check_update()
@@ -90,6 +105,8 @@ class Tests (unittest.TestCase):
         self.assertEqual(run("-q", "-k", "0"), 0)
         self.check_update()
         self.assertFalse(current.src.exists())
+        self.assertFalse(current.modules.exists())
+        self.assertFalse(current.efi.exists())
 
     @capture_stdout
     def test_update_message (self):

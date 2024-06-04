@@ -27,7 +27,7 @@ The following variables will be used throughout this description:
 
 `version` - new kernel's version string
 
-### <p>configure<span style="float:right">`ekernel-configure`</span></p>
+### `ekernel-configure`
 
 Runs `make menuconfig` if the current config file is missing, or no other kernel is installed
 
@@ -58,7 +58,7 @@ cd ${new}
 make oldconfig || exit
 ```
 
-### <p>build<span style="float:right">`ekernel-build`</span></p>
+### `ekernel-build`
 
 Build and install modules, using the given number of jobs.
 
@@ -66,7 +66,7 @@ Build and install modules, using the given number of jobs.
 make -j ${jobs} && make modules_install
 ```
 
-### <p>install<span style="float:right">`ekernel-install`</span></p>
+### `ekernel-install`
 
 Update symlink ``/usr/src/linux`` to the new source directory.
 
@@ -88,18 +88,7 @@ Rebuild external modules.
 emerge @module-rebuild
 ```
 
-### <p>commit<span style="float:right">`ekernel-commit`</span></p>
-
-Commit the new kernel config with a detailed commit message.
-
-```sh
-git add -f /usr/src/linux/.config
-git commit -S -m "${msg}"
-```
-
-The message will not only contain the version change, but also details about the newly added or removed options.
-
-### <p>clean<span style="float:right">`ekernel-clean`</span></p>
+### `ekernel-clean`
 
 Remove unused kernel source directories, modules and boot images.
 
@@ -113,9 +102,20 @@ rm -rf $(ls -1 ${esp} | sed -e '/${old}/d' -e '/${new}/d' -e '/bootx64/d')
 The default is to keep the previous kernel version in case something goes
 horribly wrong.
 
+### `ekernel-commit`
+
+Commit the new kernel config with a detailed commit message.
+
+```sh
+git add -f /usr/src/linux/.config
+git commit -S -m "${msg}"
+```
+
+The message will not only contain the version change, but also details about the newly added or removed options.
+
 ## Installation
 
-TODO: add ebuild `app-admin/ekernel`
+You may use the ebuild `app-admin/ekernel` from my [personal repository](https://github.com/phlo/phlo-portage).
 
 ## Requirements
 

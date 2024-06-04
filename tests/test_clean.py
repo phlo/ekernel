@@ -93,6 +93,19 @@ class Tests (unittest.TestCase):
         self.assertEqual(run("-q", "-k", "10"), 0)
         self.check_clean(10)
 
+    def test_clean_esp (self):
+        esp = data.root / "boot/EFI/linux"
+        esp.mkdir(parents=True)
+        for k in data.kernels:
+            efi = esp / k.efi.name
+            if k.efi.exists():
+               efi.touch()
+            k.efi.unlink()
+            k.efi = efi
+        data.esp.rmdir()
+        self.assertEqual(run("-q", "-e", str(esp)), 0)
+        self.check_clean()
+
     @colorless
     @capture_stdout
     def test_clean_dry_run (self):

@@ -24,13 +24,6 @@ esp = root / "boot/EFI/Gentoo"
 # boot image
 bootx64 = esp / "bootx64.efi"
 
-# change Kernel class' root directory
-Kernel.src = src
-Kernel.linux = linux
-Kernel.modules = modules
-Kernel.esp = esp
-Kernel.bootx64 = bootx64
-
 # list of installed kernels
 kernels = []
 sources = [
@@ -79,6 +72,13 @@ def setup ():
     # remove any existing files
     for p in root.glob("*"):
         shutil.rmtree(p)
+
+    # change Kernel class' root directory
+    Kernel.src = src
+    Kernel.linux = linux
+    Kernel.modules = modules
+    Kernel.esp = esp
+    Kernel.bootx64 = bootx64
 
     # create EFI system partition
     esp.mkdir(parents=True)

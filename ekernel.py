@@ -41,14 +41,11 @@ class Kernel:
     # kernel source symlink
     linux = src / "linux"
 
-    # EFI system partition
-    esp = pathlib.Path("/boot/EFI/Gentoo")
-
-    # boot image
-    bootx64 = esp / "bootx64.efi"
-
     # module directory
     modules = pathlib.Path("/lib/modules")
+
+    # EFI system partition
+    esp = pathlib.Path("/boot/EFI/Gentoo")
 
     def __init__ (self, src):
         """Construct a Kernel based on a given source path."""
@@ -61,6 +58,7 @@ class Kernel:
             raise ValueError(f"illegal source: {src}") from e
         self.config = self.src / ".config"
         self.bzImage = self.src / "arch/x86_64/boot/bzImage"
+        self.bootx64 = self.esp / "bootx64.efi"
         self.efi = self.esp / f"gentoo-{self.version.base_version}.efi"
         self.modules = self.modules / f"{self.version.base_version}-gentoo"
 
@@ -76,8 +74,8 @@ class Kernel:
             f"* src     = {self.src}\n"
             f"* config  = {self.config}\n"
             f"* bzImage = {self.bzImage}\n"
-            f"* efi     = {self.efi}\n"
             f"* modules = {self.modules}\n"
+            f"* efi     = {self.efi}\n"
         )
 
     @classmethod
@@ -211,9 +209,9 @@ def configure (argv):
     parser.add_argument(
         "-s",
         metavar="<src>",
-        dest="kernel",
-        type=Kernel,
-        default=Kernel.latest(),
+        dest="src",
+        type=pathlib.Path,
+        default=Kernel.latest().src,
         help="kernel source directory (default: latest)"
     )
     parser.add_argument(
@@ -223,8 +221,9 @@ def configure (argv):
         help="be quiet"
     )
     args = parser.parse_args(argv)
+    kernel = Kernel(args.src)
     out.quiet = args.quiet
-    newoptions = args.kernel.src / ".newoptions"
+    newoptions = kernel.src / ".newoptions"
 
     # check if current kernel config exists
     try:
@@ -233,18 +232,18 @@ def configure (argv):
         oldconfig = Kernel.esp / "FILENOTFOUND"
 
     # change to source directory
-    os.chdir(args.kernel.src)
+    os.chdir(kernel.src)
 
     # delete config - reconfigure
-    if args.delete and args.kernel.config.exists():
-        out.einfo(f"deleting {args.kernel.config}")
-        args.kernel.config.unlink()
+    if args.delete and kernel.config.exists():
+        out.einfo(f"deleting {kernel.config}")
+        kernel.config.unlink()
 
     # make oldconfig
-    if not args.kernel.config.exists() and oldconfig.exists():
+    if not kernel.config.exists() and oldconfig.exists():
         # copy oldconfig
         out.einfo(f"copying {out.hilite(oldconfig)}")
-        shutil.copy(oldconfig, args.kernel.config)
+        shutil.copy(oldconfig, kernel.config)
         # store newly added options
         out.einfo(f"running {out.hilite('make listnewconfig')}")
         make = subprocess.run(["make", "listnewconfig"], capture_output=True)
@@ -313,9 +312,9 @@ def build (argv):
     parser.add_argument(
         "-s",
         metavar="<src>",
-        dest="kernel",
-        type=Kernel,
-        default=Kernel.latest(),
+        dest="src",
+        type=pathlib.Path,
+        default=Kernel.latest().src,
         help="kernel source directory (default: latest)"
     )
     parser.add_argument(
@@ -325,17 +324,18 @@ def build (argv):
         help="be quiet"
     )
     args = parser.parse_args(argv)
+    kernel = Kernel(args.src)
     out.quiet = args.quiet
 
     # check if config exists
-    if not args.kernel.config.exists():
-        raise FileNotFoundError(f"missing config: {args.kernel.config}")
+    if not kernel.config.exists():
+        raise FileNotFoundError(f"missing config: {kernel.config}")
 
     # change directory
-    os.chdir(args.kernel.src)
+    os.chdir(kernel.src)
 
     # build and install modules
-    out.einfo(f"building {out.hilite(args.kernel.src.name)}")
+    out.einfo(f"building {out.hilite(kernel.src.name)}")
     subprocess.run(["make", "-j", str(args.jobs)], check=True)
     out.einfo("installing modules")
     subprocess.run(["make", "modules_install"], check=True)
@@ -352,6 +352,9 @@ def install (argv):
 
     Command Line Arguments
     ----------------------
+
+    ``-e <esp>``
+      EFI bootloader directory (default: ``/boot/EFI/Gentoo``)
 
     ``-s <src>``
       kernel source directory (default: latest)
@@ -380,11 +383,18 @@ def install (argv):
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
+        "-e",
+        metavar="<esp>",
+        dest="esp",
+        type=pathlib.Path,
+        help="EFI bootloader directory (default: /boot/EFI/Gentoo)"
+    )
+    parser.add_argument(
         "-s",
         metavar="<src>",
-        dest="kernel",
-        type=Kernel,
-        default=Kernel.latest(),
+        dest="src",
+        type=pathlib.Path,
+        default=Kernel.latest().src,
         help="kernel source directory (default: latest)"
     )
     parser.add_argument(
@@ -394,29 +404,31 @@ def install (argv):
         help="be quiet"
     )
     args = parser.parse_args(argv)
+    if args.esp: Kernel.esp = args.esp
+    kernel = Kernel(args.src)
     out.quiet = args.quiet
 
     # check if bzImage exists
-    if not args.kernel.bzImage.exists():
-        raise FileNotFoundError(f"missing bzImage {args.kernel.bzImage}")
+    if not kernel.bzImage.exists():
+        raise FileNotFoundError(f"missing bzImage {kernel.bzImage}")
 
     # update symlink to the new source directory
     out.einfo(
         "updating symlink "
-        f"{out.hilite(args.kernel.linux)} → {out.hilite(args.kernel.src)}"
+        f"{out.hilite(kernel.linux)} → {out.hilite(kernel.src)}"
     )
     subprocess.run(
-        ["eselect", "kernel", "set", args.kernel.src.name],
+        ["eselect", "kernel", "set", kernel.src.name],
         check=True
     )
 
     # copy boot image
-    out.einfo(f"creating boot image {out.hilite(args.kernel.bootx64)}")
-    shutil.copy(args.kernel.bzImage, args.kernel.bootx64)
+    out.einfo(f"creating boot image {out.hilite(kernel.bootx64)}")
+    shutil.copy(kernel.bzImage, kernel.bootx64)
 
     # create backup
-    out.einfo(f"creating backup image {out.hilite(args.kernel.efi)}")
-    shutil.copy(args.kernel.bzImage, args.kernel.efi)
+    out.einfo(f"creating backup image {out.hilite(kernel.efi)}")
+    shutil.copy(kernel.bzImage, kernel.efi)
 
     # rebuild external modules
     out.einfo(f"rebuilding external kernel modules")
@@ -437,6 +449,9 @@ def clean (argv):
     Command Line Arguments
     ----------------------
 
+    ``-e <esp>``
+      EFI bootloader directory (default: ``/boot/EFI/Gentoo``)
+
     ``-k <num>``
       keep the previous ``<num>`` kernels (default: 1)
 
@@ -451,6 +466,14 @@ def clean (argv):
         prog="ekernel-clean",
         description="Remove unused kernel leftovers.",
         formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "-e",
+        metavar="<esp>",
+        dest="esp",
+        type=pathlib.Path,
+        default=Kernel.esp,
+        help="EFI bootloader directory (default: /boot/EFI/Gentoo)"
     )
     parser.add_argument(
         "-k",
@@ -473,6 +496,7 @@ def clean (argv):
         help="be quiet"
     )
     args = parser.parse_args(argv)
+    if args.esp: Kernel.esp = args.esp
     out.quiet = args.quiet
     if args.keep < 0:
         raise ValueError("invalid int value: must be greater equal zero")
@@ -739,15 +763,20 @@ def update (argv):
         metavar="<jobs>",
         dest="jobs",
         type=int,
-        default=int(jobs),
         help=f"number of parallel make jobs (default: {jobs})"
+    )
+    parser.add_argument(
+        "-e",
+        metavar="<esp>",
+        dest="esp",
+        type=pathlib.Path,
+        help="EFI bootloader directory (default: /boot/EFI/Gentoo)"
     )
     parser.add_argument(
         "-s",
         metavar="<src>",
-        dest="kernel",
-        type=Kernel,
-        default=Kernel.latest(),
+        dest="src",
+        type=pathlib.Path,
         help="kernel source directory (default: latest)"
     )
     parser.add_argument(
@@ -755,7 +784,6 @@ def update (argv):
         metavar="<keep>",
         dest="keep",
         type=int,
-        default=1,
         help="keep the previous <num> bootable kernels (default: 1)"
     )
     parser.add_argument(
@@ -763,7 +791,6 @@ def update (argv):
         metavar="<msg>",
         dest="msg",
         type=str,
-        default="",
         help="additional information for the commit message"
     )
     parser.add_argument(
@@ -773,14 +800,15 @@ def update (argv):
         help="be quiet"
     )
     args = parser.parse_args(argv)
-    args.jobs = ["-j", str(args.jobs)]
-    args.src = ["-s", str(args.kernel.src)]
-    args.keep = ["-k", str(args.keep)]
-    args.msg = ["-m", args.msg]
+    args.jobs = ["-j", str(args.jobs)] if args.jobs else []
+    args.esp = ["-e", str(args.esp)] if args.esp else []
+    args.src = ["-s", str(args.src)] if args.src else []
+    args.keep = ["-k", str(args.keep)] if args.keep is not None else []
+    args.msg = ["-m", args.msg] if args.msg else []
     args.quiet = ["-q"] if args.quiet else []
 
     configure(args.quiet + args.src)
     build(args.quiet + args.jobs + args.src)
-    install(args.quiet + args.src)
-    clean(args.quiet + args.keep)
+    install(args.quiet + args.esp + args.src)
+    clean(args.quiet + args.esp + args.keep)
     commit(args.quiet + args.msg)

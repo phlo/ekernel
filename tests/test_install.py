@@ -24,6 +24,8 @@ class Tests (unittest.TestCase):
         self.interceptor.start()
         # setup test environment
         data.setup()
+        self.kernel = Kernel.latest()
+        self.kernel.bzImage.touch()
 
     def tearDown (self):
         # stop interceptor
@@ -55,19 +57,25 @@ class Tests (unittest.TestCase):
         self.assertTrue(self.kernel.efi.exists())
 
     def test_install (self):
-        self.kernel = Kernel.latest()
-        self.kernel.bzImage.touch()
         self.assertEqual(run("-q"), 0)
         self.check_install()
 
-    def test_install_version (self):
+    def test_install_esp (self):
+        esp = data.root / "boot/EFI/linux"
+        esp.mkdir(parents=True)
+        self.kernel.efi = esp / self.kernel.efi.name
+        self.kernel.bootx64 = esp / self.kernel.bootx64.name
+        self.assertEqual(run("-q", "-e", str(esp)), 0)
+        self.check_install()
+
+    def test_install_source (self):
         self.kernel = Kernel.current()
         self.assertEqual(run("-q", "-s", str(data.current)), 0)
         self.check_install()
 
     @capture_stderr
     def test_install_missing_bzImage (self):
-        self.kernel = Kernel.latest()
+        self.kernel.bzImage.unlink()
         with self.assertRaises(SystemExit):
             self.assertEqual(run("-s", str(data.latest)), 1)
         self.assertRegex(sys.stderr.getvalue(), r"missing.*bzImage")
