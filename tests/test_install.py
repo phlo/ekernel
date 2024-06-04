@@ -14,6 +14,12 @@ def run (*argv):
 class Tests (unittest.TestCase):
 
     def setUp (self):
+        # setup test environment
+        data.setup()
+        self.kernel = Kernel.latest()
+        self.kernel.bzImage.touch()
+        # force mounting
+        ekernel.mount.force = True
         # start interceptor
         self.interceptor = Interceptor()
         def run (tracer, *args, **kwargs):
@@ -22,10 +28,6 @@ class Tests (unittest.TestCase):
                 data.linux.symlink_to(self.kernel.src.name)
         self.interceptor.add(subprocess.run, call=run)
         self.interceptor.start()
-        # setup test environment
-        data.setup()
-        self.kernel = Kernel.latest()
-        self.kernel.bzImage.touch()
 
     def tearDown (self):
         # stop interceptor
@@ -36,7 +38,7 @@ class Tests (unittest.TestCase):
         # mount /boot
         tracer, (args, kwargs) = next(trace_it)
         self.assertEqual(tracer.name, "subprocess.run")
-        self.assertEqual(args, (["mount", "/boot"],))
+        self.assertEqual(args, (["mount", "/tmp"],))
         self.assertEqual(kwargs, {"capture_output": True, "check": True})
         # eselect kernel set <name>
         tracer, (args, kwargs) = next(trace_it)
@@ -67,6 +69,10 @@ class Tests (unittest.TestCase):
         self.kernel.bootx64 = esp / self.kernel.bootx64.name
         self.assertEqual(run("-q", "-e", str(esp)), 0)
         self.check_install()
+
+    def test_install_esp_missing (self):
+        with self.assertRaises(SystemExit):
+            run("-q", "-e", str(data.root / "boot/EFI/linux"))
 
     def test_install_source (self):
         self.kernel = Kernel.current()

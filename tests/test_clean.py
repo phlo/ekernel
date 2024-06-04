@@ -31,6 +31,8 @@ class Tests (unittest.TestCase):
                 k.modules.mkdir(parents=True)
             if not k.efi.exists():
                 k.efi.touch()
+        # force mounting
+        ekernel.mount.force = True
         # start interceptor
         self.interceptor = Interceptor()
         self.interceptor.add(subprocess.run, call=True)
@@ -46,7 +48,7 @@ class Tests (unittest.TestCase):
         # mount /boot
         tracer, (args, kwargs) = next(trace_it)
         self.assertEqual(tracer.name, "subprocess.run")
-        self.assertEqual(args, (["mount", "/boot"],))
+        self.assertEqual(args, (["mount", "/tmp"],))
         self.assertEqual(kwargs, {"capture_output": True, "check": True})
         # emerge -cq gentoo-sources
         tracer, (args, kwargs) = next(trace_it)
@@ -64,7 +66,7 @@ class Tests (unittest.TestCase):
         # umount /boot
         tracer, (args, kwargs) = next(trace_it)
         self.assertEqual(tracer.name, "subprocess.run")
-        self.assertEqual(args, (["umount", "/boot"],))
+        self.assertEqual(args, (["umount", "/tmp"],))
         self.assertEqual(kwargs, {"check": True})
 
     def test_clean (self):

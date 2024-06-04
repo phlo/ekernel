@@ -112,6 +112,11 @@ def cli (f):
     @functools.wraps(f)
     def handler (argv=sys.argv[1:]):
         try:
+            # dirty hack: set custom esp before mounting
+            try:
+                i = argv.index("-e")
+                Kernel.esp = pathlib.Path(argv[i + 1])
+            except ValueError: pass
             r = f(argv)
             return 0 if r is None else r
         except Exception as e:
@@ -119,29 +124,30 @@ def cli (f):
             sys.exit(1)
     return handler
 
-def mount (path):
+def mount (f):
     """Decorator ensuring a given path is mounted."""
-    def wrapper (f):
-        @functools.wraps(f)
-        def mounter (*args, **kwargs):
-            mounted = False
+    @functools.wraps(f)
+    def mounter (*args, **kwargs):
+        mounted = False
+        esp = Kernel.esp.parents[-2]
+        if not esp.exists() or mount.force:
             try:
                 subprocess.run(
-                    ["mount", path],
+                    ["mount", str(esp)],
                     capture_output=True,
                     check=True
                 )
                 mounted = True
             except subprocess.CalledProcessError as e:
                 msg = e.stderr.decode().strip()
-                if f"already mounted on {path}" not in msg:
+                if f"already mounted on {esp}" not in msg:
                     raise RuntimeError(e.stderr.decode().splitlines()[0])
-            r = f(*args, **kwargs)
-            if mounted:
-                subprocess.run(["umount", path], check=True)
-            return r
-        return mounter
-    return wrapper
+        r = f(*args, **kwargs)
+        if mounted:
+            subprocess.run(["umount", str(esp)], check=True)
+        return r
+    mount.force = False
+    return mounter
 
 @cli
 def configure (argv):
@@ -341,7 +347,7 @@ def build (argv):
     subprocess.run(["make", "modules_install"], check=True)
 
 @cli
-@mount("/boot")
+@mount
 def install (argv):
     """
     Install a kernel.
@@ -404,7 +410,7 @@ def install (argv):
         help="be quiet"
     )
     args = parser.parse_args(argv)
-    if args.esp: Kernel.esp = args.esp
+    if args.esp: Kernel.esp = args.esp # redundant
     kernel = Kernel(args.src)
     out.quiet = args.quiet
 
@@ -435,7 +441,7 @@ def install (argv):
     subprocess.run(["emerge", "@module-rebuild"], check=True)
 
 @cli
-@mount("/boot")
+@mount
 def clean (argv):
     """
     Remove unused kernel leftovers.
@@ -496,7 +502,7 @@ def clean (argv):
         help="be quiet"
     )
     args = parser.parse_args(argv)
-    if args.esp: Kernel.esp = args.esp
+    if args.esp: Kernel.esp = args.esp # redundant
     out.quiet = args.quiet
     if args.keep < 0:
         raise ValueError("invalid int value: must be greater equal zero")
@@ -512,9 +518,12 @@ def clean (argv):
 
     # dry run
     if args.dry:
-        out.einfo("the following kernels will be removed:")
-        for k in leftovers:
-            print(f"   {colorize('BAD', '✗')} {k.src.name}")
+        if leftovers:
+            out.einfo("the following kernels will be removed:")
+            for k in leftovers:
+                print(f"   {colorize('BAD', '✗')} {k.src.name}")
+        else:
+            out.einfo("nothing to see here")
         return
 
     # run depclean
@@ -725,14 +734,16 @@ def commit (argv):
             if args.msg: msg.write(f"\n\n{args.msg}")
 
     # print changes
-    out.einfo("changes to be committed:")
+    if removals or config_changed:
+        out.einfo("changes to be committed:")
     for l in removals:
         out.print(f"   {colorize('QAWARN', '-')} {out.hilite(l)}")
     if config_changed:
         out.print(f"   {colorize('INFO', '+')} {out.hilite(kernel.config)}")
 
     # print message
-    out.einfo("commit message:")
+    if msg:
+        out.einfo("commit message:")
     for l in msg.getvalue().splitlines():
         out.print(f"   {l}" if l else "")
 
@@ -801,7 +812,7 @@ def update (argv):
     )
     args = parser.parse_args(argv)
     args.jobs = ["-j", str(args.jobs)] if args.jobs else []
-    args.esp = ["-e", str(args.esp)] if args.esp else []
+    args.esp = ["-e", str(args.esp)] if args.esp else [] # redundant
     args.src = ["-s", str(args.src)] if args.src else []
     args.keep = ["-k", str(args.keep)] if args.keep is not None else []
     args.msg = ["-m", args.msg] if args.msg else []
