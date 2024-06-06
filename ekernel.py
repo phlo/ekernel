@@ -45,7 +45,10 @@ class Kernel:
     modules = pathlib.Path("/lib/modules")
 
     # EFI system partition
-    esp = pathlib.Path("/boot/EFI/Gentoo")
+    esp = pathlib.Path("/boot")
+
+    # EFI bootloader (stub kernel)
+    boot = esp / "EFI/Gentoo/bootx64.efi"
 
     def __init__ (self, src):
         """Construct a Kernel based on a given source path."""
@@ -58,8 +61,7 @@ class Kernel:
             raise ValueError(f"illegal source: {src}") from e
         self.config = self.src / ".config"
         self.bzImage = self.src / "arch/x86_64/boot/bzImage"
-        self.bootx64 = self.esp / "bootx64.efi"
-        self.efi = self.esp / f"gentoo-{self.version.base_version}.efi"
+        self.bkp = self.boot.parent / f"gentoo-{self.version.base_version}.efi"
         self.modules = self.modules / f"{self.version.base_version}-gentoo"
 
     def __eq__ (self, other):
@@ -75,14 +77,14 @@ class Kernel:
             f"* config  = {self.config}\n"
             f"* bzImage = {self.bzImage}\n"
             f"* modules = {self.modules}\n"
-            f"* efi     = {self.efi}\n"
+            f"* bkp     = {self.bkp}\n"
         )
 
     @classmethod
     def list (cls, descending=True):
         """Get an descending list of available kernels."""
         return list(sorted(
-            ( Kernel(src) for src in cls.src.glob("linux-*") ),
+            (Kernel(src) for src in cls.src.glob("linux-*")),
             key=lambda k: k.version,
             reverse=descending
         ))
@@ -112,11 +114,6 @@ def cli (f):
     @functools.wraps(f)
     def handler (argv=sys.argv[1:]):
         try:
-            # dirty hack: set custom esp before mounting
-            try:
-                i = argv.index("-e")
-                Kernel.esp = pathlib.Path(argv[i + 1])
-            except ValueError: pass
             r = f(argv)
             return 0 if r is None else r
         except Exception as e:
@@ -124,30 +121,64 @@ def cli (f):
             sys.exit(1)
     return handler
 
-def mount (f):
-    """Decorator ensuring a given path is mounted."""
+def efi (f):
+    """Decorator locating and mounting the ESP through efivars."""
     @functools.wraps(f)
-    def mounter (*args, **kwargs):
+    def locator (*args, **kwargs):
         mounted = False
-        esp = Kernel.esp.parents[-2]
-        if not esp.exists() or mount.force:
-            try:
-                subprocess.run(
-                    ["mount", str(esp)],
-                    capture_output=True,
-                    check=True
-                )
-                mounted = True
-            except subprocess.CalledProcessError as e:
-                msg = e.stderr.decode().strip()
-                if f"already mounted on {esp}" not in msg:
-                    raise RuntimeError(e.stderr.decode().splitlines()[0])
+        # ensure access to the currently running EFI bootloader / stub kernel
+        if not Kernel.boot.exists():
+            # find current bootloader
+            mgr = subprocess.run(
+                ["efibootmgr"],
+                capture_output=True,
+                check=True
+            )
+            lines = iter(mgr.stdout.decode().splitlines())
+            bootnum = "NaN"
+            for l in lines:
+                if l.startswith("BootCurrent"):
+                    bootnum = l.split()[1]
+                    break
+            for l in lines:
+                if l.startswith(f"Boot{bootnum}"):
+                    i = l.find("File")
+                    if i < 0:
+                        raise RuntimeError(f"error locating bootloader:\n{l}")
+                    i += 6
+                    j = l.find(")", i)
+                    loader = pathlib.Path(l[i:j].replace("\\", "/"))
+                    break
+            # find mountpoint
+            for l in pathlib.Path("/etc/fstab").read_text().splitlines():
+                if not l.startswith("#"):
+                    for p in ["/boot", "/efi"]:
+                        if p in l:
+                            Kernel.esp = pathlib.Path(p)
+                            Kernel.boot = Kernel.esp / loader
+                            break
+                    else: continue
+                    break
+            # mount esp
+            if not Kernel.boot.exists():
+                try:
+                    subprocess.run(
+                        ["mount", str(Kernel.esp)],
+                        capture_output=True,
+                        check=True
+                    )
+                    mounted = True
+                except subprocess.CalledProcessError as e:
+                    msg = e.stderr.decode().strip()
+                    if f"already mounted on {Kernel.esp}" not in msg:
+                        raise RuntimeError(e.stderr.decode().splitlines()[0])
+            assert Kernel.boot.exists()
         r = f(*args, **kwargs)
+        # umount esp
         if mounted:
-            subprocess.run(["umount", str(esp)], check=True)
+            subprocess.run(["umount", str(Kernel.esp)], check=True)
         return r
-    mount.force = False
-    return mounter
+    return locator
 
 @cli
 def configure (argv):
@@ -347,7 +378,7 @@ def build (argv):
     subprocess.run(["make", "modules_install"], check=True)
 
 @cli
-@mount
+@efi
 def install (argv):
     """
     Install a kernel.
@@ -358,9 +389,6 @@ def install (argv):
 
     Command Line Arguments
     ----------------------
-
-    ``-e <esp>``
-      EFI bootloader directory (default: ``/boot/EFI/Gentoo``)
 
     ``-s <src>``
       kernel source directory (default: latest)
@@ -389,13 +417,6 @@ def install (argv):
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
-        "-e",
-        metavar="<esp>",
-        dest="esp",
-        type=pathlib.Path,
-        help="EFI bootloader directory (default: /boot/EFI/Gentoo)"
-    )
-    parser.add_argument(
         "-s",
         metavar="<src>",
         dest="src",
@@ -410,7 +431,6 @@ def install (argv):
         help="be quiet"
     )
     args = parser.parse_args(argv)
-    if args.esp: Kernel.esp = args.esp # redundant
     kernel = Kernel(args.src)
     out.quiet = args.quiet
 
@@ -429,19 +449,19 @@ def install (argv):
     )
 
     # copy boot image
-    out.einfo(f"creating boot image {out.hilite(kernel.bootx64)}")
-    shutil.copy(kernel.bzImage, kernel.bootx64)
+    out.einfo(f"creating boot image {out.hilite(kernel.boot)}")
+    shutil.copy(kernel.bzImage, kernel.boot)
 
     # create backup
-    out.einfo(f"creating backup image {out.hilite(kernel.efi)}")
-    shutil.copy(kernel.bzImage, kernel.efi)
+    out.einfo(f"creating backup image {out.hilite(kernel.bkp)}")
+    shutil.copy(kernel.bzImage, kernel.bkp)
 
     # rebuild external modules
     out.einfo(f"rebuilding external kernel modules")
     subprocess.run(["emerge", "@module-rebuild"], check=True)
 
 @cli
-@mount
+@efi
 def clean (argv):
     """
     Remove unused kernel leftovers.
@@ -454,9 +474,6 @@ def clean (argv):
 
     Command Line Arguments
     ----------------------
-
-    ``-e <esp>``
-      EFI bootloader directory (default: ``/boot/EFI/Gentoo``)
 
     ``-k <num>``
       keep the previous ``<num>`` kernels (default: 1)
@@ -472,14 +489,6 @@ def clean (argv):
         prog="ekernel-clean",
         description="Remove unused kernel leftovers.",
         formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    parser.add_argument(
-        "-e",
-        metavar="<esp>",
-        dest="esp",
-        type=pathlib.Path,
-        default=Kernel.esp,
-        help="EFI bootloader directory (default: /boot/EFI/Gentoo)"
     )
     parser.add_argument(
         "-k",
@@ -502,15 +511,14 @@ def clean (argv):
         help="be quiet"
     )
     args = parser.parse_args(argv)
-    if args.esp: Kernel.esp = args.esp # redundant
     out.quiet = args.quiet
     if args.keep < 0:
-        raise ValueError("invalid int value: must be greater equal zero")
+        raise ValueError("invalid keep value: must be greater equal zero")
 
     # kernels to remove
     kernels = Kernel.list()
     def obsolete (k):
-        if args.keep and k.efi.exists() and k.modules.exists():
+        if args.keep and k.bkp.exists() and k.modules.exists():
             args.keep -= 1
             return False
         return True
@@ -534,7 +542,7 @@ def clean (argv):
         out.einfo(f"removing {out.hilite(k.src.name)}")
         shutil.rmtree(k.src)
         shutil.rmtree(k.modules, ignore_errors=True)
-        k.efi.unlink(missing_ok=True)
+        k.bkp.unlink(missing_ok=True)
 
 @cli
 def commit (argv):
@@ -762,6 +770,7 @@ def commit (argv):
         raise RuntimeError(e.stderr.decode())
 
 @cli
+@efi
 def update (argv):
     """Custom Gentoo EFI stub kernel updater."""
     parser = argparse.ArgumentParser(
@@ -775,13 +784,6 @@ def update (argv):
         dest="jobs",
         type=int,
         help=f"number of parallel make jobs (default: {jobs})"
-    )
-    parser.add_argument(
-        "-e",
-        metavar="<esp>",
-        dest="esp",
-        type=pathlib.Path,
-        help="EFI bootloader directory (default: /boot/EFI/Gentoo)"
     )
     parser.add_argument(
         "-s",
@@ -812,7 +814,6 @@ def update (argv):
     )
     args = parser.parse_args(argv)
     args.jobs = ["-j", str(args.jobs)] if args.jobs else []
-    args.esp = ["-e", str(args.esp)] if args.esp else [] # redundant
     args.src = ["-s", str(args.src)] if args.src else []
     args.keep = ["-k", str(args.keep)] if args.keep is not None else []
     args.msg = ["-m", args.msg] if args.msg else []
@@ -820,6 +821,6 @@ def update (argv):
 
     configure(args.quiet + args.src)
     build(args.quiet + args.jobs + args.src)
-    install(args.quiet + args.esp + args.src)
-    clean(args.quiet + args.esp + args.keep)
+    install(args.quiet + args.src)
+    clean(args.quiet + args.keep)
     commit(args.quiet + args.msg)

@@ -79,7 +79,7 @@ class Tests (unittest.TestCase):
     @capture_stderr
     def test_build_source_illegal (self):
         with self.assertRaises(SystemExit):
-            run("-s", str(data.root))
+            run("-s", str(data.tmp))
 
     def test_build_jobs_source (self):
         self.jobs = "128"

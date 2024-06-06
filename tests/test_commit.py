@@ -24,7 +24,7 @@ class Tests (unittest.TestCase):
         data.linux.unlink()
         data.linux.symlink_to(data.latest)
         # initialize git repository
-        os.chdir(data.root)
+        os.chdir(data.tmp)
         git(["init"])
         git(["config", "user.email", "some@e.mail"])
         git(["config", "user.name", "some body"])
@@ -51,7 +51,7 @@ class Tests (unittest.TestCase):
             git([
                 "cat-file",
                 "-e",
-                f"HEAD:{self.latest.config.relative_to(data.root)}"]
+                f"HEAD:{self.latest.config.relative_to(data.tmp)}"]
             ).returncode,
             0
         )
@@ -141,7 +141,7 @@ class Tests (unittest.TestCase):
     @colorless
     @capture_stderr
     def test_commit_missing_repository (self):
-        shutil.rmtree(data.root / ".git")
+        shutil.rmtree(data.tmp / ".git")
         with self.assertRaises(SystemExit):
             self.assertEqual(run(), 1)
         self.assertRegex(sys.stderr.getvalue(), r"not a git repository")

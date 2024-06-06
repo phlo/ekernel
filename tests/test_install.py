@@ -18,14 +18,13 @@ class Tests (unittest.TestCase):
         data.setup()
         self.kernel = Kernel.latest()
         self.kernel.bzImage.touch()
-        # force mounting
-        ekernel.mount.force = True
         # start interceptor
-        self.interceptor = Interceptor()
+        @data.efi
         def run (tracer, *args, **kwargs):
             if args[0][0] == "eselect":
                 data.linux.unlink()
                 data.linux.symlink_to(self.kernel.src.name)
+        self.interceptor = Interceptor()
         self.interceptor.add(subprocess.run, call=run)
         self.interceptor.start()
 
@@ -35,10 +34,15 @@ class Tests (unittest.TestCase):
 
     def check_install (self):
         trace_it = iter(self.interceptor.trace)
+        # efibootmgr
+        tracer, (args, kwargs) = next(trace_it)
+        self.assertEqual(tracer.name, "subprocess.run")
+        self.assertEqual(args, (["efibootmgr"],))
+        self.assertEqual(kwargs, {"capture_output": True, "check": True})
         # mount /boot
         tracer, (args, kwargs) = next(trace_it)
         self.assertEqual(tracer.name, "subprocess.run")
-        self.assertEqual(args, (["mount", "/tmp"],))
+        self.assertEqual(args, (["mount", "/boot"],))
         self.assertEqual(kwargs, {"capture_output": True, "check": True})
         # eselect kernel set <name>
         tracer, (args, kwargs) = next(trace_it)
@@ -54,25 +58,18 @@ class Tests (unittest.TestCase):
         self.assertEqual(tracer.name, "subprocess.run")
         self.assertEqual(args, (["emerge", "@module-rebuild"],))
         self.assertEqual(kwargs, {"check": True})
+        # umount /boot
+        tracer, (args, kwargs) = next(trace_it)
+        self.assertEqual(tracer.name, "subprocess.run")
+        self.assertEqual(args, (["umount", "/tmp"],))
+        self.assertEqual(kwargs, {"check": True})
         # check generated files
-        self.assertTrue(self.kernel.bootx64.exists())
-        self.assertTrue(self.kernel.efi.exists())
+        self.assertTrue(self.kernel.boot.exists())
+        self.assertTrue(self.kernel.bkp.exists())
 
     def test_install (self):
         self.assertEqual(run("-q"), 0)
         self.check_install()
-
-    def test_install_esp (self):
-        esp = data.root / "boot/EFI/linux"
-        esp.mkdir(parents=True)
-        self.kernel.efi = esp / self.kernel.efi.name
-        self.kernel.bootx64 = esp / self.kernel.bootx64.name
-        self.assertEqual(run("-q", "-e", str(esp)), 0)
-        self.check_install()
-
-    def test_install_esp_missing (self):
-        with self.assertRaises(SystemExit):
-            run("-q", "-e", str(data.root / "boot/EFI/linux"))
 
     def test_install_source (self):
         self.kernel = Kernel.current()

@@ -1,28 +1,30 @@
 """Setup the kernel test environment."""
+import functools
 import pathlib
 import shutil
+import subprocess
 import tempfile
 
 from ekernel import Kernel
 
 # create temporary directory
 tmpdir = tempfile.TemporaryDirectory()
-root = pathlib.Path(tmpdir.name)
+tmp = pathlib.Path(tmpdir.name)
 
 # kernel source directory
-src = root / "usr/src"
+src = tmp / "usr/src"
 
 # kernel source symlink
 linux = src / "linux"
 
 # kernel module directory
-modules = root / "lib/modules"
+modules = tmp / "lib/modules"
 
 # EFI system partition
-esp = root / "boot/EFI/Gentoo"
+esp = tmp.parents[-2]
 
 # boot image
-bootx64 = esp / "bootx64.efi"
+boot = tmp / "boot/EFI/Gentoo/bootx64.efi"
 
 # list of installed kernels
 kernels = []
@@ -67,21 +69,41 @@ CONFIG_D=y
 CONFIG_F=y
 """
 
+def efi (f):
+    """Decorator adding common EFI related test actions."""
+    @functools.wraps(f)
+    def runner (t, *args, **kwargs):
+        if args[0][0] == "efibootmgr":
+            boot.touch()
+            return subprocess.CompletedProcess("", 0,
+                "BootCurrent: 0001\n"
+                "Timeout: 1 seconds\n"
+                "BootOrder: 0001,0000\n"
+                "Boot0000* Windows HD()/File()\n"
+                "Boot0001* Gentoo HD()/File(\\EFI\\gentoo\\bootx64.efi)\n"
+                .encode()
+            )
+        elif args[0][0] == "mount":
+            Kernel.esp = esp
+            Kernel.boot = boot
+        return f(t, *args, **kwargs)
+    return runner
+
 def setup ():
     """Setup the kernel test environment."""
     # remove any existing files
-    for p in root.glob("*"):
+    for p in tmp.glob("*"):
         shutil.rmtree(p)
 
-    # change Kernel class' root directory
+    # change Kernel paths
     Kernel.src = src
     Kernel.linux = linux
     Kernel.modules = modules
     Kernel.esp = esp
-    Kernel.bootx64 = bootx64
+    Kernel.boot = boot
 
     # create EFI system partition
-    esp.mkdir(parents=True)
+    boot.parent.mkdir(parents=True)
 
     # create Kernels
     for s in sources: s.mkdir(parents=True)
@@ -97,7 +119,7 @@ def setup ():
         else:
             k.config.touch()
         k.bzImage.touch()
-        k.efi.touch()
+        k.bkp.touch()
         k.modules.mkdir(parents=True)
 
     # symlink to old source directory

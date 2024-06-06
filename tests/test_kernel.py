@@ -19,14 +19,17 @@ class Tests (unittest.TestCase):
         self.assertEqual(k.src, s)
         self.assertEqual(k.config, s / ".config")
         self.assertEqual(k.bzImage, s / "arch/x86_64/boot/bzImage")
-        self.assertEqual(k.efi, data.esp / f"gentoo-{v.base_version}.efi")
         self.assertEqual(k.modules, data.modules / f"{v.base_version}-gentoo")
+        self.assertEqual(
+            k.bkp,
+            data.boot.parent / f"gentoo-{v.base_version}.efi"
+        )
 
     def test_paths (self):
         self.assertEqual(ekernel.Kernel.src, data.src)
         self.assertEqual(ekernel.Kernel.linux, data.linux)
         self.assertEqual(ekernel.Kernel.esp, data.esp)
-        self.assertEqual(ekernel.Kernel.bootx64, data.bootx64)
+        self.assertEqual(ekernel.Kernel.boot, data.boot)
         self.assertEqual(ekernel.Kernel.modules, data.modules)
 
     def test_version (self):

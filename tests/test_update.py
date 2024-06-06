@@ -15,8 +15,19 @@ def run (*argv):
 class Tests (unittest.TestCase):
 
     def setUp (self):
+        # setup test environment
+        data.setup()
+        self.latest = Kernel.latest()
+        self.oldconfig = data.latest / ".config.old"
+        # initialize git repository
+        os.chdir(data.tmp)
+        git(["init"])
+        git(["config", "user.email", "some@e.mail"])
+        git(["config", "user.name", "some body"])
+        git(["add", "-f", Kernel.current().config])
+        git(["commit", "-m", "initial"])
         # start interceptor
-        self.interceptor = Interceptor()
+        @data.efi
         def run (tracer, *args, **kwargs):
             if args[0][0] == "make":
                 if args[0][1] == "listnewconfig":
@@ -33,38 +44,28 @@ class Tests (unittest.TestCase):
                 data.linux.symlink_to(data.latest)
             elif args[0][0] == "git":
                 return tracer.target(*args, **kwargs)
+        self.interceptor = Interceptor()
         self.interceptor.add(subprocess.run, call=run)
         self.interceptor.start()
-        # setup test environmenT
-        data.setup()
-        self.latest = Kernel.latest()
-        self.oldconfig = data.latest / ".config.old"
-        # initialize git repository
-        os.chdir(data.root)
-        git(["init"])
-        git(["config", "user.email", "some@e.mail"])
-        git(["config", "user.name", "some body"])
-        git(["add", "-f", Kernel.current().config])
-        git(["commit", "-m", "initial"])
 
     def check_update (self):
         # configure
         self.assertTrue(self.oldconfig.exists())
         self.assertTrue(self.latest.config.exists())
         # install
-        self.assertTrue(self.latest.bootx64.exists())
-        self.assertTrue(self.latest.efi.exists())
+        self.assertTrue(self.latest.boot.exists())
+        self.assertTrue(self.latest.bkp.exists())
         # clean
         for k in data.kernels[2:]:
             self.assertFalse(k.src.exists())
             self.assertFalse(k.modules.exists())
-            self.assertFalse(k.efi.exists())
+            self.assertFalse(k.bkp.exists())
         # check if config has been commited
         self.assertEqual(
             git([
                 "cat-file",
                 "-e",
-                f"HEAD:{self.latest.config.relative_to(data.root)}"]
+                f"HEAD:{self.latest.config.relative_to(data.tmp)}"]
             ).returncode,
             0
         )
@@ -81,21 +82,6 @@ class Tests (unittest.TestCase):
         self.assertEqual(run("-q", "-j", "8"), 0)
         self.check_update()
 
-    def test_update_esp (self):
-        esp = data.root / "boot/EFI/linux"
-        esp.mkdir(parents=True)
-        for k in data.kernels:
-            efi = esp / k.efi.name
-            if k.efi.exists():
-                efi.touch()
-                k.efi.unlink()
-            k.efi = efi
-        data.esp.rmdir()
-        self.latest.efi = esp / self.latest.efi.name
-        self.latest.bootx64 = esp / self.latest.bootx64.name
-        self.assertEqual(run("-q", "-e", str(esp)), 0)
-        self.check_update()
-
     def test_update_source (self):
         self.assertEqual(run("-q", "-s", str(data.latest)), 0)
         self.check_update()
@@ -106,7 +92,7 @@ class Tests (unittest.TestCase):
         self.check_update()
         self.assertFalse(current.src.exists())
         self.assertFalse(current.modules.exists())
-        self.assertFalse(current.efi.exists())
+        self.assertFalse(current.bkp.exists())
 
     @capture_stdout
     def test_update_message (self):

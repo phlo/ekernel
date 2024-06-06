@@ -23,19 +23,19 @@ class Tests (unittest.TestCase):
         data.linux.unlink()
         data.linux.symlink_to(data.latest)
         # initialize git repository
-        os.chdir(data.root)
+        os.chdir(data.tmp)
         for k in data.kernels[:-2]:
             if not k.config.exists():
                 k.config.touch()
             if not k.modules.exists():
                 k.modules.mkdir(parents=True)
-            if not k.efi.exists():
-                k.efi.touch()
-        # force mounting
-        ekernel.mount.force = True
+            if not k.bkp.exists():
+                k.bkp.touch()
         # start interceptor
+        @data.efi
+        def run (tracer, *args, **kwargs): pass
         self.interceptor = Interceptor()
-        self.interceptor.add(subprocess.run, call=True)
+        self.interceptor.add(subprocess.run, call=run)
         self.interceptor.start()
 
     def tearDown (self):
@@ -45,10 +45,15 @@ class Tests (unittest.TestCase):
     def check_clean (self, keep=1):
         split = data.kernels.index(Kernel.current()) + keep + 1
         trace_it = iter(self.interceptor.trace)
+        # efibootmgr
+        tracer, (args, kwargs) = next(trace_it)
+        self.assertEqual(tracer.name, "subprocess.run")
+        self.assertEqual(args, (["efibootmgr"],))
+        self.assertEqual(kwargs, {"capture_output": True, "check": True})
         # mount /boot
         tracer, (args, kwargs) = next(trace_it)
         self.assertEqual(tracer.name, "subprocess.run")
-        self.assertEqual(args, (["mount", "/tmp"],))
+        self.assertEqual(args, (["mount", "/boot"],))
         self.assertEqual(kwargs, {"capture_output": True, "check": True})
         # emerge -cq gentoo-sources
         tracer, (args, kwargs) = next(trace_it)
@@ -58,11 +63,11 @@ class Tests (unittest.TestCase):
         for k in data.kernels[:split]:
             self.assertTrue(k.src.exists())
             self.assertTrue(k.modules.exists())
-            self.assertTrue(k.efi.exists())
+            self.assertTrue(k.bkp.exists())
         for k in data.kernels[split:]:
             self.assertFalse(k.src.exists())
             self.assertFalse(k.modules.exists())
-            self.assertFalse(k.efi.exists())
+            self.assertFalse(k.bkp.exists())
         # umount /boot
         tracer, (args, kwargs) = next(trace_it)
         self.assertEqual(tracer.name, "subprocess.run")
@@ -74,7 +79,7 @@ class Tests (unittest.TestCase):
         self.check_clean()
 
     def test_clean_missing_efi (self):
-        data.kernels[-1].efi.unlink()
+        data.kernels[-1].bkp.unlink()
         self.assertEqual(run("-q"), 0)
         self.check_clean()
 
@@ -94,19 +99,6 @@ class Tests (unittest.TestCase):
     def test_clean_keep_gt_available (self):
         self.assertEqual(run("-q", "-k", "10"), 0)
         self.check_clean(10)
-
-    def test_clean_esp (self):
-        esp = data.root / "boot/EFI/linux"
-        esp.mkdir(parents=True)
-        for k in data.kernels:
-            efi = esp / k.efi.name
-            if k.efi.exists():
-               efi.touch()
-            k.efi.unlink()
-            k.efi = efi
-        data.esp.rmdir()
-        self.assertEqual(run("-q", "-e", str(esp)), 0)
-        self.check_clean()
 
     @colorless
     @capture_stdout
