@@ -173,11 +173,12 @@ def efi (f):
                     if f"already mounted on {Kernel.esp}" not in msg:
                         raise RuntimeError(e.stderr.decode().splitlines()[0])
             assert Kernel.boot.exists()
-        r = f(*args, **kwargs)
-        # umount esp
-        if mounted:
-            subprocess.run(["umount", str(Kernel.esp)], check=True)
-        return r
+        try:
+            return f(*args, **kwargs)
+        finally:
+            # umount esp
+            if mounted:
+                subprocess.run(["umount", str(Kernel.esp)], check=True)
     return locator
 
 @cli

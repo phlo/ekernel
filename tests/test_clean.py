@@ -100,6 +100,15 @@ class Tests (unittest.TestCase):
         self.assertEqual(run("-q", "-k", "10"), 0)
         self.check_clean(10)
 
+    @capture_stdout
+    def test_clean_umount_on_error (self):
+        with self.assertRaises(SystemExit):
+            self.assertEqual(run("-h"), 0)
+        tracer, (args, kwargs) = self.interceptor.trace[-1]
+        self.assertEqual(tracer.name, "subprocess.run")
+        self.assertEqual(args, (["umount", "/tmp"],))
+        self.assertEqual(kwargs, {"check": True})
+
     @colorless
     @capture_stdout
     def test_clean_dry_run (self):
