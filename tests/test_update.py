@@ -32,7 +32,7 @@ class Tests (unittest.TestCase):
             if args[0][0] == "make":
                 if args[0][1] == "listnewconfig":
                     make = subprocess.CompletedProcess("", 0)
-                    make.stdout = str.encode(data.newoptions)
+                    make.stdout = data.newoptions.encode()
                     return make
                 elif args[0][1] == "oldconfig":
                     self.latest.config.write_text(data.newconfig)
@@ -53,7 +53,7 @@ class Tests (unittest.TestCase):
         self.assertTrue(self.oldconfig.exists())
         self.assertTrue(self.latest.config.exists())
         # install
-        self.assertTrue(self.latest.boot.exists())
+        self.assertTrue(ekernel.efi.boot.exists())
         self.assertTrue(self.latest.bkp.exists())
         # clean
         for k in data.kernels[2:]:

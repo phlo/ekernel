@@ -26,7 +26,7 @@ class Tests (unittest.TestCase):
             if args[0][0] == "make":
                 if args[0][1] == "listnewconfig":
                     make = subprocess.CompletedProcess("", 0)
-                    make.stdout = str.encode(data.newoptions)
+                    make.stdout = data.newoptions.encode()
                     return make
                 elif args[0][1] == "menuconfig":
                     self.kernel.config.touch()

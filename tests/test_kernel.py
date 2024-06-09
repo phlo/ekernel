@@ -28,8 +28,6 @@ class Tests (unittest.TestCase):
     def test_paths (self):
         self.assertEqual(ekernel.Kernel.src, data.src)
         self.assertEqual(ekernel.Kernel.linux, data.linux)
-        self.assertEqual(ekernel.Kernel.esp, data.esp)
-        self.assertEqual(ekernel.Kernel.boot, data.boot)
         self.assertEqual(ekernel.Kernel.modules, data.modules)
 
     def test_version (self):

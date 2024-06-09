@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 
-from ekernel import Kernel
+import ekernel
 
 # create temporary directory
 tmpdir = tempfile.TemporaryDirectory()
@@ -74,18 +74,20 @@ def efi (f):
     @functools.wraps(f)
     def runner (t, *args, **kwargs):
         if args[0][0] == "efibootmgr":
-            boot.touch()
             return subprocess.CompletedProcess("", 0,
                 "BootCurrent: 0001\n"
                 "Timeout: 1 seconds\n"
                 "BootOrder: 0001,0000\n"
-                "Boot0000* Windows HD()/File()\n"
-                "Boot0001* Gentoo HD()/File(\\EFI\\gentoo\\bootx64.efi)\n"
+                "Boot0000* Windows\tHD()/File()\n"
+                "Boot0001* Gentoo\tHD()/File(\\EFI\\Gentoo\\bootx64.efi)\n"
+                "Boot0002* Gentoo (ignore)\tHD()/File()\n"
+                "Boot0003* Gentoo (fallback)\tHD()/File()\n"
                 .encode()
             )
         elif args[0][0] == "mount":
-            Kernel.esp = esp
-            Kernel.boot = boot
+            ekernel.efi.esp = esp
+            ekernel.efi.boot = boot
+            boot.write_bytes(str(kernels[1].bkp).encode())
         return f(t, *args, **kwargs)
     return runner
 
@@ -96,11 +98,13 @@ def setup ():
         shutil.rmtree(p)
 
     # change Kernel paths
-    Kernel.src = src
-    Kernel.linux = linux
-    Kernel.modules = modules
-    Kernel.esp = esp
-    Kernel.boot = boot
+    ekernel.Kernel.src = src
+    ekernel.Kernel.linux = linux
+    ekernel.Kernel.modules = modules
+
+    # change EFI paths
+    ekernel.efi.esp = esp
+    ekernel.efi.boot = boot
 
     # create EFI system partition
     boot.parent.mkdir(parents=True)
@@ -108,7 +112,7 @@ def setup ():
     # create Kernels
     for s in sources: s.mkdir(parents=True)
     global kernels
-    kernels = [ Kernel(s) for s in sources ]
+    kernels = [ ekernel.Kernel(s) for s in sources ]
 
     # create config and build files, expect for the latest
     for k in kernels:
@@ -119,7 +123,7 @@ def setup ():
         else:
             k.config.touch()
         k.bzImage.touch()
-        k.bkp.touch()
+        k.bkp.write_bytes(str(k.bkp).encode())
         k.modules.mkdir(parents=True)
 
     # symlink to old source directory
