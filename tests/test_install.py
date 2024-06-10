@@ -99,7 +99,7 @@ class Tests (unittest.TestCase):
         self.assertEqual(args, (["umount", "/tmp"],))
         self.assertEqual(kwargs, {"check": True})
         # check generated files
-        self.assertTrue(ekernel.efi.boot.exists())
+        self.assertTrue(ekernel.efi.img.exists())
         self.assertTrue(self.kernel.bkp.exists())
 
     def test_install (self):

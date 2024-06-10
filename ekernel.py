@@ -21,7 +21,7 @@ jobs = "4"
 # gentoo's fancy terminal output functions
 out = output.EOutput()
 out.print = lambda s: print(s) if not out.quiet else None
-out.hilite = lambda s: colorize("HILITE", str(s))
+out.emph = lambda s: colorize("HILITE", str(s))
 
 # disable colorization for pipes and redirects
 if not sys.stdout.isatty():
@@ -56,7 +56,7 @@ class Kernel:
             raise ValueError(f"illegal source: {src}") from e
         self.config = self.src / ".config"
         self.bzImage = self.src / "arch/x86_64/boot/bzImage"
-        self.bkp = efi.boot.parent / f"gentoo-{self.version.base_version}.efi"
+        self.bkp = efi.img.parent / f"gentoo-{self.version.base_version}.efi"
         self.modules = self.modules / f"{self.version.base_version}-gentoo"
 
     def __eq__ (self, other):
@@ -121,18 +121,17 @@ def cli (f):
     return handler
 
 def efi (f):
-    """Decorator locating and mounting the ESP through efivars."""
+    """Decorator locating and mounting ESP through efivars."""
     efi.skip = False
-    # system partition
+    # boot partition
     efi.esp = pathlib.Path("/boot")
-    # bootloader (stub kernel)
-    efi.boot = efi.esp / "EFI/Gentoo/bootx64.efi"
+    # boot image
+    efi.img = efi.esp / "EFI/Gentoo/bootx64.efi"
     # backup entry data
     efi.bkp = {}
     # analyze boot entries and ensure access to the currently running image
     @functools.wraps(f)
     def locator (*args, **kwargs):
-        # skip detection
         if efi.skip:
             return f(*args, **kwargs)
         efi.skip = True
@@ -142,47 +141,45 @@ def efi (f):
             capture_output=True,
             check=True
         )
-        entries = mgr.stdout.decode().splitlines()
-        bootnum = "NaN"
-        for l in entries:
+        lines = mgr.stdout.decode().splitlines()
+        num = "NaN"
+        for l in lines:
             if l.startswith("BootCurrent"):
-                bootnum = l.split()[1]
+                num = l[13:17]
                 break
-        # find currently running boot entry / loader
-        def parse (entry):
-            # label
-            i = l.find(" ") + 1
-            j = l.find("\t", i)
-            label = l[i:j]
-            # loader
-            i = l.find("File", j)
-            if i < 0:
-                raise RuntimeError(f"error locating bootloader:\n{l}")
+        # find currently running entry/image
+        def loader (line, start=9):
+            i = line.find("File", start)
+            if i < 0: raise RuntimeError(f"error locating boot image:\n{line}")
             i += 6
-            j = l.find(")", i)
-            loader = pathlib.Path(l[i:j].replace("\\", "/"))
-            return label, loader
-        for l in entries:
-            if l.startswith(f"Boot{bootnum}"):
-                label, loader = parse(l)
-                efi.label = label
-                efi.bkp["label"] = f"{label} (fallback)"
+            return pathlib.Path(l[i:line.find(")", i)].replace("\\", "/"))
+        for l in lines:
+            if l.startswith(f"Boot{num}"):
+                i = l.find(" ") + 1
+                j = l.find("\t", i)
+                efi.label = l[i:j]
+                efi.bkp["label"] = f"{efi.label} (fallback)"
+                img = loader(l, j)
                 break
-        # find bootnum of backup entry
-        for l in entries:
+        # find fallback entry/image
+        for l in lines:
             if efi.bkp["label"] in l:
-                efi.bkp["bootnum"] = l[4:8]
+                efi.bkp["num"] = l[4:8]
+                efi.bkp["img"] = loader(l)
                 break
         # mount esp
         mounted = False
-        if not efi.boot.exists():
+        if not efi.img.exists():
             # find mountpoint
             for l in pathlib.Path("/etc/fstab").read_text().splitlines():
                 if not l.startswith("#"):
                     for p in ["/boot", "/efi"]:
                         if p in l:
+                            # update paths
                             efi.esp = pathlib.Path(p)
-                            efi.boot = efi.esp / loader
+                            efi.img = efi.esp / img
+                            if efi.bkp and "img" in efi.bkp:
+                                efi.bkp["img"] = efi.esp / efi.bkp["img"]
                             break
                     else: continue
                     break
@@ -199,7 +196,7 @@ def efi (f):
                 msg = e.stderr.decode().strip()
                 if f"already mounted on {efi.esp}" not in msg:
                     raise RuntimeError(e.stderr.decode().splitlines()[0])
-        assert efi.boot.exists()
+        assert efi.img.exists()
         try:
             return f(*args, **kwargs)
         finally:
@@ -308,19 +305,19 @@ def configure (argv):
     # make oldconfig
     if not kernel.config.exists() and oldconfig.exists():
         # copy oldconfig
-        out.einfo(f"copying {out.hilite(oldconfig)}")
+        out.einfo(f"copying {out.emph(oldconfig)}")
         shutil.copy(oldconfig, kernel.config)
         # store newly added options
-        out.einfo(f"running {out.hilite('make listnewconfig')}")
+        out.einfo(f"running {out.emph('make listnewconfig')}")
         make = subprocess.run(["make", "listnewconfig"], capture_output=True)
         newoptions.write_text(make.stdout.decode())
         # configure
         if not args.list:
-            out.einfo(f"running {out.hilite('make oldconfig')}")
+            out.einfo(f"running {out.emph('make oldconfig')}")
             subprocess.run(["make", "oldconfig"], check=True)
     # make menuconfig
     elif not args.list:
-        out.einfo(f"running {out.hilite('make menuconfig')}")
+        out.einfo(f"running {out.emph('make menuconfig')}")
         subprocess.run(["make", "menuconfig"], check=True)
 
     # check if we should print new options
@@ -401,7 +398,7 @@ def build (argv):
     os.chdir(kernel.src)
 
     # build and install modules
-    out.einfo(f"building {out.hilite(kernel.src.name)}")
+    out.einfo(f"building {out.emph(kernel.src.name)}")
     subprocess.run(["make", "-j", str(args.jobs)], check=True)
     out.einfo("installing modules")
     subprocess.run(["make", "modules_install"], check=True)
@@ -476,21 +473,21 @@ def install (argv):
     if not kernel.bzImage.exists():
         raise FileNotFoundError(f"missing bzImage {kernel.bzImage}")
 
-    # create backup boot entry
+    # create fallback boot entry
     if args.bkp:
         # path to backup image
         bkp = None
         # find the currently running kernel's backup image
-        boot_bytes = efi.boot.read_bytes()
-        for f in efi.boot.parent.glob("gentoo*.efi"):
+        boot_bytes = efi.img.read_bytes()
+        for f in efi.img.parent.glob("gentoo*.efi"):
             if f.read_bytes() == boot_bytes:
                 bkp = f
                 break
         # not found
         else:
             name = f"gentoo-{version(platform.release()).base_version}.efi"
-            bkp = efi.boot.parent / name
-            shutil.copy(efi.boot, bkp)
+            bkp = efi.img.parent / name
+            shutil.copy(efi.img, bkp)
         # get ESP disk and partition number
         dev = subprocess.run(
             ["findmnt", "-rno", "SOURCE", str(efi.esp)],
@@ -502,11 +499,11 @@ def install (argv):
             re.search(r"([/a-z]+)(\d+)", dev.stdout.decode()).groups()
         )
         # remove previous entry
-        if "bootnum" in efi.bkp:
+        if "num" in efi.bkp:
             subprocess.run([
                 "efibootmgr",
                 "-q",
-                "-b", efi.bkp["bootnum"],
+                "-b", efi.bkp["num"],
                 "-B"
             ], check=True)
         # create entry
@@ -519,11 +516,12 @@ def install (argv):
             "-L", efi.bkp["label"],
             "-l", str(bkp)
         ], check=True)
+        efi.bkp["img"] = bkp
 
     # update symlink to the new source directory
     out.einfo(
         "updating symlink "
-        f"{out.hilite(kernel.linux)} → {out.hilite(kernel.src)}"
+        f"{out.emph(kernel.linux)} → {out.emph(kernel.src)}"
     )
     subprocess.run(
         ["eselect", "kernel", "set", kernel.src.name],
@@ -531,11 +529,11 @@ def install (argv):
     )
 
     # copy boot image
-    out.einfo(f"creating boot image {out.hilite(efi.boot)}")
-    shutil.copy(kernel.bzImage, efi.boot)
+    out.einfo(f"creating boot image {out.emph(efi.img)}")
+    shutil.copy(kernel.bzImage, efi.img)
 
     # create backup
-    out.einfo(f"creating backup image {out.hilite(kernel.bkp)}")
+    out.einfo(f"creating backup image {out.emph(kernel.bkp)}")
     shutil.copy(kernel.bzImage, kernel.bkp)
 
     # rebuild external modules
@@ -620,29 +618,42 @@ def clean (argv):
         if d not in keep["modules"]
     ]
 
-    # collect boot loaders
-    keep["boot loaders"] = {k.bkp for k in keep["kernels"]}
-    rm["boot loaders"] = [
+    # collect boot images
+    keep["images"] = {k.bkp for k in keep["kernels"]}
+    rm["images"] = [
         f
-        for f in efi.boot.parent.glob("gentoo-*")
-        if f not in keep["boot loaders"]
+        for f in efi.img.parent.glob("gentoo-*")
+        if f not in keep["images"]
     ]
 
     # run depclean
-    out.einfo(f"running {out.hilite('emerge -cq gentoo-sources')}")
+    out.einfo(f"running {out.emph('emerge -cq gentoo-sources')}")
     if not args.dry:
         subprocess.run(["emerge", "-cq", "gentoo-sources"])
 
-    # remove leftovers
+    # remove files
     for k, v in rm.items():
         out.einfo(f"deleting {k}:")
         for p in v:
-            out.print(f"   {colorize('BAD', '✗')} {out.hilite(p)}")
+            out.print(f"   {colorize('BAD', '✗')} {out.emph(p)}")
             if args.dry: continue
             if p.is_dir():
                 shutil.rmtree(p)
             else:
                 p.unlink()
+
+    # remove defunct fallback boot entry
+    if efi.bkp and "img" in efi.bkp:
+        bkp = efi.bkp["img"]
+        if not bkp.exists() or bkp in rm["images"]:
+            out.einfo(f"deleting boot entry {out.emph(efi.bkp['label'])}")
+            if not args.dry:
+                subprocess.run([
+                    "efibootmgr",
+                    "-q",
+                    "-b", efi.bkp["num"],
+                    "-B"
+                ], check=True)
 
 @cli
 def commit (argv):
@@ -845,9 +856,9 @@ def commit (argv):
     if removals or config_changed:
         out.einfo("changes to be committed:")
     for l in removals:
-        out.print(f"   {colorize('QAWARN', '-')} {out.hilite(l)}")
+        out.print(f"   {colorize('QAWARN', '-')} {out.emph(l)}")
     if config_changed:
-        out.print(f"   {colorize('INFO', '+')} {out.hilite(kernel.config)}")
+        out.print(f"   {colorize('INFO', '+')} {out.emph(kernel.config)}")
 
     # print message
     if msg:

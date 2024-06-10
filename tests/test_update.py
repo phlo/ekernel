@@ -62,7 +62,7 @@ class Tests (unittest.TestCase):
         self.assertTrue(self.oldconfig.exists())
         self.assertTrue(self.latest.config.exists())
         # install
-        self.assertTrue(ekernel.efi.boot.exists())
+        self.assertTrue(ekernel.efi.img.exists())
         self.assertTrue(self.latest.bkp.exists())
         # clean
         for k in data.kernels[2:]:

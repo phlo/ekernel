@@ -59,6 +59,18 @@ class Tests (unittest.TestCase):
         self.assertEqual(tracer.name, "subprocess.run")
         self.assertEqual(args, (["emerge", "-cq", "gentoo-sources"],))
         self.assertEqual(kwargs, {})
+        if keep < 3:
+            # efibootmgr -b 0003 -B
+            tracer, (args, kwargs) = next(trace_it)
+            self.assertEqual(tracer.name, "subprocess.run")
+            self.assertEqual(args, (["efibootmgr", "-q", "-b", "0003", "-B"],))
+            self.assertEqual(kwargs, {"check": True})
+        # umount /boot
+        tracer, (args, kwargs) = next(trace_it)
+        self.assertEqual(tracer.name, "subprocess.run")
+        self.assertEqual(args, (["umount", "/tmp"],))
+        self.assertEqual(kwargs, {"check": True})
+        # check files
         for k in data.kernels[:keep]:
             self.assertTrue(k.src.exists())
             self.assertTrue(k.modules.exists())
@@ -67,11 +79,6 @@ class Tests (unittest.TestCase):
             self.assertFalse(k.src.exists())
             self.assertFalse(k.modules.exists())
             self.assertFalse(k.bkp.exists())
-        # umount /boot
-        tracer, (args, kwargs) = next(trace_it)
-        self.assertEqual(tracer.name, "subprocess.run")
-        self.assertEqual(args, (["umount", "/tmp"],))
-        self.assertEqual(kwargs, {"check": True})
 
     def test_clean (self):
         self.assertEqual(run("-q"), 0)
@@ -87,9 +94,9 @@ class Tests (unittest.TestCase):
         self.assertEqual(run("-q"), 0)
         self.check_clean()
 
-    def test_clean_keep_2 (self):
-        self.assertEqual(run("-q", "-k", "2"), 0)
-        self.check_clean(2)
+    def test_clean_keep_3 (self):
+        self.assertEqual(run("-q", "-k", "3"), 0)
+        self.check_clean(3)
 
     def test_clean_keep_none (self):
         with self.assertRaises(SystemExit):
@@ -118,7 +125,7 @@ class Tests (unittest.TestCase):
         rm = {
             "sources": [k.src for k in kernels],
             "modules": [k.modules for k in kernels],
-            "boot loaders": [k.bkp for k in kernels]
+            "images": [k.bkp for k in kernels]
         }
         expected = io.StringIO()
         expected.write(" * running emerge -cq gentoo-sources\n")
@@ -126,4 +133,5 @@ class Tests (unittest.TestCase):
             expected.write(f" * deleting {k}:\n")
             for p in v:
                 expected.write(f"   ✗ {p}\n")
+        expected.write(" * deleting boot entry Gentoo (fallback)\n")
         self.assertEqual(sys.stdout.getvalue(), expected.getvalue())

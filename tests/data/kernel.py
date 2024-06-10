@@ -20,7 +20,7 @@ linux = src / "linux"
 # kernel module directory
 modules = tmp / "lib/modules"
 
-# EFI system partition
+# EFI system partition (/boot -> /tmp)
 esp = tmp.parents[-2]
 
 # boot image
@@ -79,15 +79,17 @@ def efi (f):
                 "Timeout: 1 seconds\n"
                 "BootOrder: 0001,0000\n"
                 "Boot0000* Windows\tHD()/File()\n"
-                "Boot0001* Gentoo\tHD()/File(\\EFI\\Gentoo\\bootx64.efi)\n"
+               f"Boot0001* Gentoo\tHD()/File(\\EFI\\Gentoo\\{boot.name})\n"
                 "Boot0002* Gentoo (ignore)\tHD()/File()\n"
-                "Boot0003* Gentoo (fallback)\tHD()/File()\n"
+                "Boot0003* Gentoo (fallback)\tHD()"
+                    f"/File(\\EFI\\Gentoo\\{kernels[2].bkp.name})\n"
                 .encode()
             )
         elif args[0][0] == "mount":
             ekernel.efi.esp = esp
-            ekernel.efi.boot = boot
+            ekernel.efi.img = boot
             boot.write_bytes(str(kernels[1].bkp).encode())
+            ekernel.efi.bkp["img"] = boot.parent / ekernel.efi.bkp["img"].name
         return f(t, *args, **kwargs)
     return runner
 
@@ -104,7 +106,7 @@ def setup ():
 
     # change EFI paths
     ekernel.efi.esp = esp
-    ekernel.efi.boot = boot
+    ekernel.efi.img = boot
 
     # create EFI system partition
     boot.parent.mkdir(parents=True)
