@@ -75,6 +75,10 @@ class Kernel:
             f"* bkp     = {self.bkp}\n"
         )
 
+    def bootable (self):
+        """Return True if boot image and modules exist."""
+        return self.modules.exists() and self.bkp.exists()
+
     @classmethod
     def list (cls, descending=True):
         """Get an descending list of available kernels."""
@@ -573,8 +577,8 @@ def clean (argv):
         metavar="<keep>",
         dest="keep",
         type=int,
-        default=1,
-        help="keep the previous <num> bootable kernels (default: 1)"
+        default=2,
+        help="keep the newest <num> bootable kernels (default: 2)"
     )
     parser.add_argument(
         "-n",
@@ -590,37 +594,55 @@ def clean (argv):
     )
     args = parser.parse_args(argv)
     out.quiet = args.quiet
-    if args.keep < 0:
-        raise ValueError("invalid keep value: must be greater equal zero")
+    if args.keep < 1:
+        raise ValueError("at least one bootable kernel must be kept")
 
-    # kernels to remove
-    kernels = Kernel.list()
-    def obsolete (k):
-        if args.keep and k.bkp.exists() and k.modules.exists():
+    # retained kernels
+    keep = {"kernels": []}
+    for k in Kernel.list():
+        if args.keep and k.bootable():
             args.keep -= 1
-            return False
-        return True
-    leftovers = filter(obsolete, kernels[kernels.index(Kernel.current()) + 1:])
+            keep["kernels"].append(k)
 
-    # dry run
-    if args.dry:
-        if leftovers:
-            out.einfo("the following kernels will be removed:")
-            for k in leftovers:
-                out.print(f"   {colorize('BAD', '✗')} {k.src.name}")
-        else:
-            out.einfo("nothing to see here")
-        return
+    # collect sources
+    keep["sources"] = {k.src for k in keep["kernels"]}
+    rm = {"sources": [
+        d
+        for d in Kernel.src.glob("linux-*")
+        if d not in keep["sources"]
+    ]}
+
+    # collect modules
+    keep["modules"] = {k.modules for k in keep["kernels"]}
+    rm["modules"] = [
+        d
+        for d in Kernel.modules.glob("*-gentoo")
+        if d not in keep["modules"]
+    ]
+
+    # collect boot loaders
+    keep["boot loaders"] = {k.bkp for k in keep["kernels"]}
+    rm["boot loaders"] = [
+        f
+        for f in efi.boot.parent.glob("gentoo-*")
+        if f not in keep["boot loaders"]
+    ]
 
     # run depclean
-    subprocess.run(["emerge", "-cq", "gentoo-sources"])
+    out.einfo(f"running {out.hilite('emerge -cq gentoo-sources')}")
+    if not args.dry:
+        subprocess.run(["emerge", "-cq", "gentoo-sources"])
 
     # remove leftovers
-    for k in leftovers:
-        out.einfo(f"removing {out.hilite(k.src.name)}")
-        shutil.rmtree(k.src)
-        shutil.rmtree(k.modules, ignore_errors=True)
-        k.bkp.unlink(missing_ok=True)
+    for k, v in rm.items():
+        out.einfo(f"deleting {k}:")
+        for p in v:
+            out.print(f"   {colorize('BAD', '✗')} {out.hilite(p)}")
+            if args.dry: continue
+            if p.is_dir():
+                shutil.rmtree(p)
+            else:
+                p.unlink()
 
 @cli
 def commit (argv):

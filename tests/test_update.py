@@ -39,6 +39,8 @@ class Tests (unittest.TestCase):
                     self.oldconfig.write_text(data.oldconfig)
                 elif args[0][1] == "-j":
                     self.latest.bzImage.touch()
+                elif args[0][1] == "modules_install":
+                    self.latest.modules.mkdir(parents=True)
             elif args[0][0] == "eselect":
                 data.linux.unlink()
                 data.linux.symlink_to(data.latest)
@@ -49,6 +51,13 @@ class Tests (unittest.TestCase):
         self.interceptor.start()
 
     def check_update (self):
+        self.assertEqual(
+            len([
+                x for x in self.interceptor.trace
+                if "mount" in x[1][0][0][0]
+            ]),
+            2
+        )
         # configure
         self.assertTrue(self.oldconfig.exists())
         self.assertTrue(self.latest.config.exists())
@@ -88,7 +97,7 @@ class Tests (unittest.TestCase):
 
     def test_update_keep (self):
         current = Kernel.current()
-        self.assertEqual(run("-q", "-k", "0"), 0)
+        self.assertEqual(run("-q", "-k", "1"), 0)
         self.check_update()
         self.assertFalse(current.src.exists())
         self.assertFalse(current.modules.exists())

@@ -126,7 +126,7 @@ class Tests (unittest.TestCase):
     def test_install_missing_bzImage (self):
         self.kernel.bzImage.unlink()
         with self.assertRaises(SystemExit):
-            self.assertEqual(run("-s", str(data.latest)), 1)
+            run("-s", str(data.latest))
         self.assertRegex(sys.stderr.getvalue(), r"missing.*bzImage")
         tracer, (args, kwargs) = self.interceptor.trace[-1]
         self.assertEqual(tracer.name, "subprocess.run")

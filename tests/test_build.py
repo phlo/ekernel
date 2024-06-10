@@ -74,7 +74,7 @@ class Tests (unittest.TestCase):
     def test_build_source_missing_config (self):
         Kernel.latest().config.unlink()
         with self.assertRaises(SystemExit):
-            self.assertEqual(run("-q", "-s", str(data.latest)), 1)
+            run("-q", "-s", str(data.latest))
 
     @capture_stderr
     def test_build_source_illegal (self):

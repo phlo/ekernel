@@ -2,7 +2,7 @@
 
 Automate custom gentoo kernel update tasks.
 
-The update process can roughly be divided into the usual three steps:
+The update process can be divided into the following steps:
 
 1) **configure** - copy and update the previous `.config`
 2) **build** - compile the new kernel and install modules

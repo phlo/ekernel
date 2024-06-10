@@ -63,6 +63,10 @@ class Tests (unittest.TestCase):
     def test_neq (self):
         self.assertNotEqual(ekernel.Kernel.current(), ekernel.Kernel.latest())
 
+    def test_bootable (self):
+        self.assertFalse(ekernel.Kernel.latest().bootable())
+        self.assertTrue(ekernel.Kernel.current().bootable())
+
     def test_current_missing (self):
         kernel = ekernel.Kernel.current()
         shutil.rmtree(kernel.src)

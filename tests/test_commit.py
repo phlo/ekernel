@@ -143,7 +143,7 @@ class Tests (unittest.TestCase):
     def test_commit_missing_repository (self):
         shutil.rmtree(data.tmp / ".git")
         with self.assertRaises(SystemExit):
-            self.assertEqual(run(), 1)
+            run()
         self.assertRegex(sys.stderr.getvalue(), r"not a git repository")
 
     @colorless
@@ -151,7 +151,7 @@ class Tests (unittest.TestCase):
     def test_commit_missing_config (self):
         self.latest.config.unlink()
         with self.assertRaises(SystemExit):
-            self.assertEqual(run(), 1)
+            run()
         self.assertEqual(
             sys.stderr.getvalue(),
             f" * missing config: {self.latest.config}\n"
@@ -164,7 +164,7 @@ class Tests (unittest.TestCase):
         staged.touch()
         subprocess.run(["git", "add", "-f", staged])
         with self.assertRaises(SystemExit):
-            self.assertEqual(run(), 1)
+            run()
         self.assertEqual(
             sys.stderr.getvalue(),
             " * please commit or stash staged changes\n"

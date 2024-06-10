@@ -110,7 +110,7 @@ class Tests (unittest.TestCase):
     def test_configure_list_newopts_missing_config_exists (self):
         self.kernel.config.touch()
         with self.assertRaises(SystemExit):
-            self.assertEqual(run("-l"), 1)
+            run("-l")
         self.assertEqual(sys.stderr.getvalue(),
             f" * missing {self.kernel.newoptions}\n"
         )
@@ -120,7 +120,7 @@ class Tests (unittest.TestCase):
     def test_configure_list_newopts_missing_oldconfig_missing (self):
         Kernel.current().config.unlink()
         with self.assertRaises(SystemExit):
-            self.assertEqual(run("-l"), 1)
+            run("-l")
         self.assertEqual(sys.stderr.getvalue(),
             f" * missing {self.kernel.newoptions}\n"
         )
