@@ -57,8 +57,8 @@ class Tests (unittest.TestCase):
         # emerge -cq gentoo-sources
         tracer, (args, kwargs) = next(trace_it)
         self.assertEqual(tracer.name, "subprocess.run")
-        self.assertEqual(args, (["emerge", "-cq", "gentoo-sources"],))
-        self.assertEqual(kwargs, {})
+        self.assertEqual(args, (["emerge", "-q", "-c", "gentoo-sources"],))
+        self.assertEqual(kwargs, {"check": True})
         if keep < 3:
             # efibootmgr -b 0003 -B
             tracer, (args, kwargs) = next(trace_it)
@@ -128,7 +128,6 @@ class Tests (unittest.TestCase):
             "images": [k.bkp for k in kernels]
         }
         expected = io.StringIO()
-        expected.write(" * running emerge -cq gentoo-sources\n")
         for k, v in rm.items():
             expected.write(f" * deleting {k}:\n")
             for p in v:

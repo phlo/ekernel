@@ -112,7 +112,7 @@ class Tests (unittest.TestCase):
         with self.assertRaises(SystemExit):
             run("-l")
         self.assertEqual(sys.stderr.getvalue(),
-            f" * missing {self.kernel.newoptions}\n"
+            f" * error: missing {self.kernel.newoptions}\n"
         )
 
     @colorless
@@ -122,7 +122,7 @@ class Tests (unittest.TestCase):
         with self.assertRaises(SystemExit):
             run("-l")
         self.assertEqual(sys.stderr.getvalue(),
-            f" * missing {self.kernel.newoptions}\n"
+            f" * error: missing {self.kernel.newoptions}\n"
         )
 
     @colorless

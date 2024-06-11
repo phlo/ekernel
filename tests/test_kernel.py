@@ -72,4 +72,4 @@ class Tests (unittest.TestCase):
         shutil.rmtree(kernel.src)
         with self.assertRaises(ValueError) as e:
             ekernel.Kernel.current()
-        self.assertEqual(str(e.exception), f"missing source: {kernel.src}")
+        self.assertEqual(str(e.exception), f"error: missing source {kernel.src}")

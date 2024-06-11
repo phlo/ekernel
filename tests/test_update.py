@@ -29,7 +29,9 @@ class Tests (unittest.TestCase):
         # start interceptor
         @data.efi
         def run (tracer, *args, **kwargs):
-            if args[0][0] == "make":
+            if args[0][0] == "findmnt":
+                return subprocess.CompletedProcess("", 0, b"/dev/sda1")
+            elif args[0][0] == "make":
                 if args[0][1] == "listnewconfig":
                     make = subprocess.CompletedProcess("", 0)
                     make.stdout = data.newoptions.encode()
@@ -95,7 +97,12 @@ class Tests (unittest.TestCase):
         self.assertEqual(run("-q", "-s", str(data.latest)), 0)
         self.check_update()
 
+    def test_update_backup (self):
+        self.assertEqual(run("-q", "-b"), 0)
+        self.check_update()
+
     def test_update_keep (self):
+        print()
         current = Kernel.current()
         self.assertEqual(run("-q", "-k", "1"), 0)
         self.check_update()

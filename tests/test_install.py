@@ -51,6 +51,20 @@ class Tests (unittest.TestCase):
         self.assertEqual(tracer.name, "subprocess.run")
         self.assertEqual(args, (["mount", "/boot"],))
         self.assertEqual(kwargs, {"capture_output": True, "check": True})
+        # eselect kernel set <name>
+        tracer, (args, kwargs) = next(trace_it)
+        self.assertEqual(tracer.name, "subprocess.run")
+        self.assertEqual(
+            args,
+            (["eselect", "kernel", "set", self.kernel.src.name],)
+        )
+        self.assertEqual(kwargs, {"check": True})
+        self.assertEqual(str(data.linux.readlink()), self.kernel.src.name)
+        # emerge @module-rebuild
+        tracer, (args, kwargs) = next(trace_it)
+        self.assertEqual(tracer.name, "subprocess.run")
+        self.assertEqual(args, (["emerge", "-q", "@module-rebuild"],))
+        self.assertEqual(kwargs, {"check": True})
         if backup:
             if data.boot.read_bytes() == b"missing image":
                 # platform.release
@@ -79,20 +93,6 @@ class Tests (unittest.TestCase):
                 "-l", str(self.current.bkp)
             ],))
             self.assertEqual(kwargs, {"check": True})
-        # eselect kernel set <name>
-        tracer, (args, kwargs) = next(trace_it)
-        self.assertEqual(tracer.name, "subprocess.run")
-        self.assertEqual(
-            args,
-            (["eselect", "kernel", "set", self.kernel.src.name],)
-        )
-        self.assertEqual(kwargs, {"check": True})
-        self.assertEqual(str(data.linux.readlink()), self.kernel.src.name)
-        # emerge @module-rebuild
-        tracer, (args, kwargs) = next(trace_it)
-        self.assertEqual(tracer.name, "subprocess.run")
-        self.assertEqual(args, (["emerge", "@module-rebuild"],))
-        self.assertEqual(kwargs, {"check": True})
         # umount <boot>
         tracer, (args, kwargs) = next(trace_it)
         self.assertEqual(tracer.name, "subprocess.run")

@@ -154,7 +154,7 @@ class Tests (unittest.TestCase):
             run()
         self.assertEqual(
             sys.stderr.getvalue(),
-            f" * missing config: {self.latest.config}\n"
+            f" * error: missing config {self.latest.config}\n"
         )
 
     @colorless
@@ -177,8 +177,8 @@ class Tests (unittest.TestCase):
         self.assertEqual(run("-n"), 0)
         self.assertEqual(sys.stdout.getvalue(),
             " * changes to be committed:\n"
-            f"   - {self.current.config}\n"
-            f"   + {self.latest.config}\n"
+            f"   ✗ {self.current.config}\n"
+            f"   ✓ {self.latest.config}\n"
             " * commit message:\n"
             "   kernel update: "
             f"{self.current.version} → {self.latest.version}\n"
@@ -214,7 +214,7 @@ class Tests (unittest.TestCase):
         self.assertEqual(run("-n", "-m", "details"), 0)
         self.assertEqual(sys.stdout.getvalue(),
             " * changes to be committed:\n"
-            f"   - {self.current.config}\n"
+            f"   ✗ {self.current.config}\n"
             " * commit message:\n"
             "   removed old kernel leftovers\n\n"
             "   details\n"

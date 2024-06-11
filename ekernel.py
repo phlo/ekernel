@@ -21,7 +21,9 @@ jobs = "4"
 # gentoo's fancy terminal output functions
 out = output.EOutput()
 out.print = lambda s: print(s) if not out.quiet else None
-out.emph = lambda s: colorize("HILITE", str(s))
+out.green = lambda s: colorize("green", s if isinstance(s, str) else str(s))
+out.red = lambda s: colorize("red", s if isinstance(s, str) else str(s))
+out.teal = lambda s: colorize("teal", s if isinstance(s, str) else str(s))
 
 # disable colorization for pipes and redirects
 if not sys.stdout.isatty():
@@ -49,11 +51,11 @@ class Kernel:
         """Construct a Kernel based on a given source path."""
         self.src = pathlib.Path(src)
         if not self.src.exists():
-            raise ValueError(f"missing source: {src}")
+            raise ValueError(f"error: missing source {src}")
         try:
             self.version = version(self.src.name)
         except Exception as e:
-            raise ValueError(f"illegal source: {src}") from e
+            raise ValueError(f"error: illegal source {src}") from e
         self.config = self.src / ".config"
         self.bzImage = self.src / "arch/x86_64/boot/bzImage"
         self.bkp = efi.img.parent / f"gentoo-{self.version.base_version}.efi"
@@ -150,7 +152,7 @@ def efi (f):
         # find currently running entry/image
         def loader (line, start=9):
             i = line.find("File", start)
-            if i < 0: raise RuntimeError(f"error locating boot image:\n{line}")
+            if i < 0: raise RuntimeError(f"error: missing boot image:\n{line}")
             i += 6
             return pathlib.Path(l[i:line.find(")", i)].replace("\\", "/"))
         for l in lines:
@@ -183,8 +185,7 @@ def efi (f):
                             break
                     else: continue
                     break
-            else:
-                raise RuntimeError("error finding ESP mountpoint")
+            else: raise RuntimeError("error: missing mountpoint of ESP")
             try:
                 subprocess.run(
                     ["mount", str(efi.esp)],
@@ -305,25 +306,25 @@ def configure (argv):
     # make oldconfig
     if not kernel.config.exists() and oldconfig.exists():
         # copy oldconfig
-        out.einfo(f"copying {out.emph(oldconfig)}")
+        out.einfo(f"copying {out.teal(oldconfig)}")
         shutil.copy(oldconfig, kernel.config)
         # store newly added options
-        out.einfo(f"running {out.emph('make listnewconfig')}")
+        out.einfo(f"running {out.teal('make listnewconfig')}")
         make = subprocess.run(["make", "listnewconfig"], capture_output=True)
         newoptions.write_text(make.stdout.decode())
         # configure
         if not args.list:
-            out.einfo(f"running {out.emph('make oldconfig')}")
+            out.einfo(f"running {out.teal('make oldconfig')}")
             subprocess.run(["make", "oldconfig"], check=True)
     # make menuconfig
     elif not args.list:
-        out.einfo(f"running {out.emph('make menuconfig')}")
+        out.einfo(f"running {out.teal('make menuconfig')}")
         subprocess.run(["make", "menuconfig"], check=True)
 
     # check if we should print new options
     if args.list:
         if not newoptions.exists():
-            raise FileNotFoundError(f"missing {newoptions}")
+            raise FileNotFoundError(f"error: missing {newoptions}")
         for l in newoptions.read_text().splitlines():
             opt, val = l.split("=", maxsplit=1)
             out.print(f"   {opt} = {val}")
@@ -392,15 +393,15 @@ def build (argv):
 
     # check if config exists
     if not kernel.config.exists():
-        raise FileNotFoundError(f"missing config: {kernel.config}")
+        raise FileNotFoundError(f"error: missing config {kernel.config}")
 
     # change directory
     os.chdir(kernel.src)
 
     # build and install modules
-    out.einfo(f"building {out.emph(kernel.src.name)}")
+    out.einfo(f"building {out.teal(kernel.src)}")
     subprocess.run(["make", "-j", str(args.jobs)], check=True)
-    out.einfo("installing modules")
+    out.einfo(f"installing modules {out.teal(kernel.modules)}")
     subprocess.run(["make", "modules_install"], check=True)
 
 @cli
@@ -469,16 +470,44 @@ def install (argv):
     kernel = Kernel(args.src)
     out.quiet = args.quiet
 
+    # store running image for latter comparison
+    if args.bkp:
+        boot_bytes = efi.img.read_bytes()
+
     # check if bzImage exists
     if not kernel.bzImage.exists():
-        raise FileNotFoundError(f"missing bzImage {kernel.bzImage}")
+        raise FileNotFoundError(f"error: missing bzImage {kernel.bzImage}")
+
+    # update symlink to the new source directory
+    out.einfo(
+        "updating symlink "
+        f"{out.teal(kernel.linux)} → {out.teal(kernel.src)}"
+    )
+    subprocess.run(
+        ["eselect", "kernel", "set", kernel.src.name],
+        check=True
+    )
+
+    # copy boot image
+    out.einfo(f"creating boot image {out.teal(efi.img)}")
+    shutil.copy(kernel.bzImage, efi.img)
+
+    # create backup
+    out.einfo(f"creating backup image {out.teal(kernel.bkp)}")
+    shutil.copy(kernel.bzImage, kernel.bkp)
+
+    # rebuild external modules
+    eargs = ["emerge", "@module-rebuild"]
+    if args.quiet:
+        eargs.insert(1, "-q")
+    out.einfo(f"running {out.teal(' '.join(eargs))}")
+    subprocess.run(eargs, check=True)
 
     # create fallback boot entry
     if args.bkp:
         # path to backup image
         bkp = None
         # find the currently running kernel's backup image
-        boot_bytes = efi.img.read_bytes()
         for f in efi.img.parent.glob("gentoo*.efi"):
             if f.read_bytes() == boot_bytes:
                 bkp = f
@@ -494,12 +523,10 @@ def install (argv):
             capture_output=True,
             check=True
         )
-        disk, part = filter(
-            None,
-            re.search(r"([/a-z]+)(\d+)", dev.stdout.decode()).groups()
-        )
+        disk, part = re.search(r"([/a-z]+)(\d+)", dev.stdout.decode()).groups()
         # remove previous entry
         if "num" in efi.bkp:
+            out.einfo(f"deleting boot entry {out.teal(efi.bkp['label'])}")
             subprocess.run([
                 "efibootmgr",
                 "-q",
@@ -507,6 +534,7 @@ def install (argv):
                 "-B"
             ], check=True)
         # create entry
+        out.einfo(f"creating boot entry {out.teal(efi.bkp['label'])}")
         subprocess.run([
             "efibootmgr",
             "-q",
@@ -517,28 +545,6 @@ def install (argv):
             "-l", str(bkp)
         ], check=True)
         efi.bkp["img"] = bkp
-
-    # update symlink to the new source directory
-    out.einfo(
-        "updating symlink "
-        f"{out.emph(kernel.linux)} → {out.emph(kernel.src)}"
-    )
-    subprocess.run(
-        ["eselect", "kernel", "set", kernel.src.name],
-        check=True
-    )
-
-    # copy boot image
-    out.einfo(f"creating boot image {out.emph(efi.img)}")
-    shutil.copy(kernel.bzImage, efi.img)
-
-    # create backup
-    out.einfo(f"creating backup image {out.emph(kernel.bkp)}")
-    shutil.copy(kernel.bzImage, kernel.bkp)
-
-    # rebuild external modules
-    out.einfo(f"rebuilding external kernel modules")
-    subprocess.run(["emerge", "@module-rebuild"], check=True)
 
 @cli
 @efi
@@ -593,7 +599,7 @@ def clean (argv):
     args = parser.parse_args(argv)
     out.quiet = args.quiet
     if args.keep < 1:
-        raise ValueError("at least one bootable kernel must be kept")
+        raise ValueError("error: at least one bootable kernel must be kept")
 
     # retained kernels
     keep = {"kernels": []}
@@ -627,15 +633,18 @@ def clean (argv):
     ]
 
     # run depclean
-    out.einfo(f"running {out.emph('emerge -cq gentoo-sources')}")
     if not args.dry:
-        subprocess.run(["emerge", "-cq", "gentoo-sources"])
+        eargs = ["emerge", "-c", "gentoo-sources"]
+        if args.quiet:
+            eargs.insert(1, "-q")
+        out.einfo(f"running {out.teal(' '.join(eargs))}")
+        subprocess.run(eargs, check=True)
 
     # remove files
     for k, v in rm.items():
         out.einfo(f"deleting {k}:")
         for p in v:
-            out.print(f"   {colorize('BAD', '✗')} {out.emph(p)}")
+            out.print(f"   {out.red('✗')} {out.teal(p)}")
             if args.dry: continue
             if p.is_dir():
                 shutil.rmtree(p)
@@ -646,7 +655,7 @@ def clean (argv):
     if efi.bkp and "img" in efi.bkp:
         bkp = efi.bkp["img"]
         if not bkp.exists() or bkp in rm["images"]:
-            out.einfo(f"deleting boot entry {out.emph(efi.bkp['label'])}")
+            out.einfo(f"deleting boot entry {out.teal(efi.bkp['label'])}")
             if not args.dry:
                 subprocess.run([
                     "efibootmgr",
@@ -689,14 +698,14 @@ def commit (argv):
 
     def summarize (diff: list[str]):
         """Generate the summary of changed options."""
-        def changes (s):
+        def startswith (ch):
             return dict([
                 x[1:].split("=", maxsplit=1)
                 for x in diff
-                if x.startswith(s + "CONFIG") and "CC_VERSION" not in x
+                if x.startswith(ch + "CONFIG") and "CC_VERSION" not in x
             ])
-        additions = changes("+")
-        deletions = changes("-")
+        additions = startswith("+")
+        deletions = startswith("-")
         changes = {
             k: (deletions[k], additions[k])
             for k in additions.keys() & deletions.keys()
@@ -749,7 +758,7 @@ def commit (argv):
 
     # ensure that a config exists
     if not kernel.config.exists():
-        raise FileNotFoundError(f"missing config: {kernel.config}")
+        raise FileNotFoundError(f"error: missing config {kernel.config}")
 
     # change to source directory
     os.chdir(kernel.src)
@@ -856,15 +865,15 @@ def commit (argv):
     if removals or config_changed:
         out.einfo("changes to be committed:")
     for l in removals:
-        out.print(f"   {colorize('QAWARN', '-')} {out.emph(l)}")
+        out.print(f"   {out.red('✗')} {out.teal(l)}")
     if config_changed:
-        out.print(f"   {colorize('INFO', '+')} {out.emph(kernel.config)}")
+        out.print(f"   {out.green('✓')} {out.teal(kernel.config)}")
 
     # print message
     if msg:
         out.einfo("commit message:")
-    for l in msg.getvalue().splitlines():
-        out.print(f"   {l}" if l else "")
+        for l in msg.getvalue().splitlines():
+            out.print(f"   {out.teal(l)}" if l else "")
 
     # dry run: revert staged changes
     if args.dry:
@@ -874,7 +883,7 @@ def commit (argv):
     # commit
     try:
         out.ebegin("committing")
-        git(["commit", "-m", msg.getvalue()])
+        ret = git(["commit", "-m", msg.getvalue()])
         out.eend(0)
     except subprocess.CalledProcessError as e:
         out.eend(1)
