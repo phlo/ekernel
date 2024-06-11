@@ -40,11 +40,6 @@ class Tests (unittest.TestCase):
         self.assertEqual(args, (["make", "-j", self.jobs],))
         self.assertEqual(kwargs, {"check": True})
         self.assertTrue(self.kernel.bzImage.exists())
-        # make modules_install
-        tracer, (args, kwargs) = next(trace_it)
-        self.assertEqual(tracer.name, "subprocess.run")
-        self.assertEqual(args, (["make", "modules_install"],))
-        self.assertEqual(kwargs, {"check": True})
 
     def test_build (self):
         self.assertEqual(run("-q"), 0)

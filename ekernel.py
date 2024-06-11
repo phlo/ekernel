@@ -395,14 +395,10 @@ def build (argv):
     if not kernel.config.exists():
         raise FileNotFoundError(f"error: missing config {kernel.config}")
 
-    # change directory
+    # build
     os.chdir(kernel.src)
-
-    # build and install modules
     out.einfo(f"building {out.teal(kernel.src)}")
     subprocess.run(["make", "-j", str(args.jobs)], check=True)
-    out.einfo(f"installing modules {out.teal(kernel.modules)}")
-    subprocess.run(["make", "modules_install"], check=True)
 
 @cli
 @efi
@@ -495,6 +491,11 @@ def install (argv):
     # create backup
     out.einfo(f"creating backup image {out.teal(kernel.bkp)}")
     shutil.copy(kernel.bzImage, kernel.bkp)
+
+    # install modules
+    os.chdir(kernel.src)
+    out.einfo(f"installing modules {out.teal(kernel.modules)}")
+    subprocess.run(["make", "modules_install"], check=True)
 
     # rebuild external modules
     eargs = ["emerge", "@module-rebuild"]

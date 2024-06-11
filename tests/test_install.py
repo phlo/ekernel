@@ -60,6 +60,11 @@ class Tests (unittest.TestCase):
         )
         self.assertEqual(kwargs, {"check": True})
         self.assertEqual(str(data.linux.readlink()), self.kernel.src.name)
+        # make modules_install
+        tracer, (args, kwargs) = next(trace_it)
+        self.assertEqual(tracer.name, "subprocess.run")
+        self.assertEqual(args, (["make", "modules_install"],))
+        self.assertEqual(kwargs, {"check": True})
         # emerge @module-rebuild
         tracer, (args, kwargs) = next(trace_it)
         self.assertEqual(tracer.name, "subprocess.run")
