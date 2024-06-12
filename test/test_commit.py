@@ -5,8 +5,8 @@ import sys
 import unittest
 
 from ekernel import Kernel
-from tests import git, capture_stdout, capture_stderr, colorless
-import tests.data.kernel as data
+from test import git, capture_stdout, capture_stderr, colorless
+import test.data.kernel as data
 
 import ekernel
 

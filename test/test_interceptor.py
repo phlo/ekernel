@@ -2,7 +2,7 @@ import os
 import subprocess
 import unittest
 
-from tests import Interceptor
+from test import Interceptor
 
 class Foo:
 

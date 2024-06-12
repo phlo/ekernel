@@ -4,8 +4,8 @@ import sys
 import unittest
 
 from ekernel import Kernel
-from tests import capture_stderr, Interceptor
-import tests.data.kernel as data
+from test import capture_stderr, Interceptor
+import test.data.kernel as data
 
 import ekernel
 
@@ -63,7 +63,7 @@ class Tests (unittest.TestCase):
         # make modules_install
         tracer, (args, kwargs) = next(trace_it)
         self.assertEqual(tracer.name, "subprocess.run")
-        self.assertEqual(args, (["make", "modules_install"],))
+        self.assertEqual(args, (["make", "modules_install", ">/dev/null"],))
         self.assertEqual(kwargs, {"check": True})
         # emerge @module-rebuild
         tracer, (args, kwargs) = next(trace_it)

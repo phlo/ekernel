@@ -398,7 +398,10 @@ def build (argv):
     # build
     os.chdir(kernel.src)
     out.einfo(f"building {out.teal(kernel.src)}")
-    subprocess.run(["make", "-j", str(args.jobs)], check=True)
+    margs = ["make", "-j", str(args.jobs)]
+    if args.quiet:
+        margs.append(">/dev/null")
+    subprocess.run(margs, check=True)
 
 @cli
 @efi
@@ -495,7 +498,10 @@ def install (argv):
     # install modules
     os.chdir(kernel.src)
     out.einfo(f"installing modules {out.teal(kernel.modules)}")
-    subprocess.run(["make", "modules_install"], check=True)
+    margs = ["make", "modules_install"]
+    if args.quiet:
+        margs.append(">/dev/null")
+    subprocess.run(margs, check=True)
 
     # rebuild external modules
     eargs = ["emerge", "@module-rebuild"]
@@ -643,7 +649,8 @@ def clean (argv):
 
     # remove files
     for k, v in rm.items():
-        out.einfo(f"deleting {k}:")
+        if v:
+            out.einfo(f"deleting {k}:")
         for p in v:
             out.print(f"   {out.red('✗')} {out.teal(p)}")
             if args.dry: continue
@@ -871,7 +878,7 @@ def commit (argv):
         out.print(f"   {out.green('✓')} {out.teal(kernel.config)}")
 
     # print message
-    if msg:
+    if msg.getvalue():
         out.einfo("commit message:")
         for l in msg.getvalue().splitlines():
             out.print(f"   {out.teal(l)}" if l else "")
@@ -891,7 +898,6 @@ def commit (argv):
         raise RuntimeError(e.stderr.decode())
 
 @cli
-@efi
 def update (argv):
     """Custom Gentoo EFI stub kernel updater."""
     parser = argparse.ArgumentParser(

@@ -6,8 +6,8 @@ import sys
 import unittest
 
 from ekernel import Kernel
-from tests import capture_stdout, colorless, Interceptor
-import tests.data.kernel as data
+from test import capture_stdout, colorless, Interceptor
+import test.data.kernel as data
 
 import ekernel
 
