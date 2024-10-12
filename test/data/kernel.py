@@ -78,11 +78,11 @@ def efi (f):
                 "BootCurrent: 0001\n"
                 "Timeout: 1 seconds\n"
                 "BootOrder: 0001,0000\n"
-                "Boot0000* Windows\tHD()/File()\n"
-               f"Boot0001* Gentoo\tHD()/File(\\EFI\\Gentoo\\{boot.name})\n"
-                "Boot0002* Gentoo (ignore)\tHD()/File()\n"
-                "Boot0003* Gentoo (fallback)\tHD()"
-                    f"/File(\\EFI\\Gentoo\\{kernels[2].bkp.name})\n"
+                "Boot0000* Windows\tHD()/\\EFI\\Microsoft\\bootmgfw.efi\n"
+               f"Boot0001* Gentoo\tHD()/\\EFI\\Gentoo\\{boot.name}\n"
+                "Boot0002* Gentoo (ignore)\tHD()/\\EFI\\Gentoo\\ignore.efi\n"
+                "Boot0003* Gentoo (fallback)\tHD()/"
+                    f"\\EFI\\Gentoo\\{kernels[2].bkp.name}\n"
                 .encode()
             )
         elif args[0][0] == "mount":

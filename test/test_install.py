@@ -1,3 +1,4 @@
+import pathlib
 import platform
 import subprocess
 import sys
@@ -88,6 +89,8 @@ class Tests (unittest.TestCase):
             # efibootmgr -c -d <disk> -p <part> -L <label> -l <loader>
             tracer, (args, kwargs) = next(trace_it)
             self.assertEqual(tracer.name, "subprocess.run")
+            loader = self.current.bkp.parts
+            loader = "\\" + "\\".join(loader[loader.index("EFI"):])
             self.assertEqual(args, ([
                 "efibootmgr",
                 "-q",
@@ -95,7 +98,7 @@ class Tests (unittest.TestCase):
                 "-d", "/dev/sda",
                 "-p", "1",
                 "-L", "Gentoo (fallback)",
-                "-l", str(self.current.bkp)
+                "-l", loader
             ],))
             self.assertEqual(kwargs, {"check": True})
         # umount <boot>

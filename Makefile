@@ -2,7 +2,7 @@
 PYTHON = python3 -B
 
 # virtual environment path
-VENV = venv
+VENV = /tmp/ekernel/venv
 
 # command to activate the virtual environment
 ACTIVATE = . $(VENV)/bin/activate
@@ -45,9 +45,13 @@ init: requirements
 # disable pip's cache (under ~/.cache/pip)
 export PIP_NO_CACHE_DIR ?= true
 
+# install editable
+install: $(VENV)
+	$(ACTIVATE) && pip install -e .
+
 # install dependencies
 .PHONY: requirements
-requirements: $(VENV)
+requirements: $(VENV) requirements.txt
 	$(ACTIVATE) && pip install -U -r requirements.txt
 
 # create virtual environment

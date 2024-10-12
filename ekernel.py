@@ -151,10 +151,11 @@ def efi (f):
                 break
         # find currently running entry/image
         def loader (line, start=9):
-            i = line.find("File", start)
+            i = line.find("/\\EFI", start)
             if i < 0: raise RuntimeError(f"error: missing boot image:\n{line}")
-            i += 6
-            return pathlib.Path(l[i:line.find(")", i)].replace("\\", "/"))
+            i += 1
+            j = line.find(".efi", i) + 4
+            return pathlib.Path(l[i:j].replace("\\", "/"))
         for l in lines:
             if l.startswith(f"Boot{num}"):
                 i = l.find(" ") + 1
@@ -181,7 +182,7 @@ def efi (f):
                             efi.esp = pathlib.Path(p)
                             efi.img = efi.esp / img
                             if efi.bkp and "img" in efi.bkp:
-                                efi.bkp["img"] = efi.esp / efi.bkp["img"]
+                                efi.bkp["img"] = efi.bkp["img"]
                             break
                     else: continue
                     break
@@ -311,7 +312,9 @@ def configure (argv):
         # store newly added options
         out.einfo(f"running {out.teal('make listnewconfig')}")
         make = subprocess.run(["make", "listnewconfig"], capture_output=True)
-        newoptions.write_text(make.stdout.decode())
+        newoptions.write_text("\n".join(
+            l for l in make.stdout.decode().splitlines() if "=" in l
+        ))
         # configure
         if not args.list:
             out.einfo(f"running {out.teal('make oldconfig')}")
@@ -327,7 +330,7 @@ def configure (argv):
             raise FileNotFoundError(f"error: missing {newoptions}")
         for l in newoptions.read_text().splitlines():
             opt, val = l.split("=", maxsplit=1)
-            out.print(f"   {opt} = {val}")
+            out.print(f"{opt} = {val}")
 
 @cli
 def build (argv):
@@ -549,7 +552,7 @@ def install (argv):
             "-d", disk,
             "-p", part,
             "-L", efi.bkp["label"],
-            "-l", str(bkp)
+            "-l", "\\" + "\\".join(bkp.parts[bkp.parts.index("EFI"):])
         ], check=True)
         efi.bkp["img"] = bkp
 

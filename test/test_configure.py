@@ -87,9 +87,9 @@ class Tests (unittest.TestCase):
         self.assertEqual(sys.stdout.getvalue(),
             f" * copying {Kernel.current().config}\n"
             " * running make listnewconfig\n"
-            "   CONFIG_D = n\n"
-            "   CONFIG_E = n\n"
-            "   CONFIG_F = n\n"
+            "CONFIG_D = n\n"
+            "CONFIG_E = n\n"
+            "CONFIG_F = n\n"
         )
 
     @colorless
@@ -100,9 +100,9 @@ class Tests (unittest.TestCase):
         self.assertEqual(sys.stdout.getvalue(),
             f" * copying {Kernel.current().config}\n"
             " * running make listnewconfig\n"
-            "   CONFIG_D = n\n"
-            "   CONFIG_E = n\n"
-            "   CONFIG_F = n\n"
+            "CONFIG_D = n\n"
+            "CONFIG_E = n\n"
+            "CONFIG_F = n\n"
         )
 
     @colorless
